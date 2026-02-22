@@ -1,0 +1,41 @@
+export const EXPENSE_CATEGORIES = [
+  "Shopping",
+  "Entertainment",
+  "Bills & Utilities",
+  "Education",
+  "Travel",
+  "Food",
+  "Health & Wellness",
+  "Supermarket",
+  "Transport",
+  "Home",
+  "Friends",
+  "Pets",
+  "Gifts",
+  "Personal Care",
+  "Subscriptions",
+  "Savings",
+  "Other",
+] as const;
+
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+export const CATEGORY_ICONS: Record<ExpenseCategory, string> = {
+  Shopping: "🛍️",
+  Entertainment: "🎬",
+  "Bills & Utilities": "💡",
+  Education: "📚",
+  Travel: "✈️",
+  Food: "🍽️",
+  "Health & Wellness": "💊",
+  Supermarket: "🛒",
+  Transport: "🚗",
+  Home: "🏠",
+  Friends: "👥",
+  Pets: "🐾",
+  Gifts: "🎁",
+  "Personal Care": "💇",
+  Subscriptions: "📱",
+  Savings: "💰",
+  Other: "📌",
+};
