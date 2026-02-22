@@ -97,9 +97,9 @@ export function ExpenseList({ expenses }: ExpenseListProps) {
               >
                 <Flex align="center" gap="3">
                   <Collapsible.Indicator transition="transform 0.2s" _open={{ transform: "rotate(90deg)" }}>
-                    <Box as="svg" width="4" height="4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" color="fg.muted">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="m9 18 6-6-6-6" />
-                    </Box>
+                    </svg>
                   </Collapsible.Indicator>
                   <Text fontSize="sm" fontWeight="semibold" color="fg.heading">
                     {group.label}
