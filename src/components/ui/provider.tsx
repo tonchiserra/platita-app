@@ -7,12 +7,12 @@ import { MoneyVisibilityProvider } from "@/lib/context/money-visibility";
 
 export function Provider({ children }: { children: React.ReactNode }) {
   return (
-    <ChakraProvider value={system}>
-      <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
+    <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
+      <ChakraProvider value={system}>
         <MoneyVisibilityProvider>
           {children}
         </MoneyVisibilityProvider>
-      </ThemeProvider>
-    </ChakraProvider>
+      </ChakraProvider>
+    </ThemeProvider>
   );
 }

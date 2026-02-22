@@ -51,7 +51,7 @@ function CustomTooltip({ active, payload, label, mask }: any) {
 export function PatrimonyChart({ data }: PatrimonyChartProps) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
-  const [selectedRange, setSelectedRange] = useState("Todo");
+  const [selectedRange, setSelectedRange] = useState("1A");
   const { mask } = useMoneyVisibility();
 
   const gridColor = isDark ? "#1e293b" : "#e5e7eb";
@@ -137,8 +137,8 @@ export function PatrimonyChart({ data }: PatrimonyChartProps) {
           <AreaChart data={chartData}>
             <defs>
               <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                <stop offset="5%" stopColor="#3d77b8" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#3d77b8" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
@@ -168,7 +168,7 @@ export function PatrimonyChart({ data }: PatrimonyChartProps) {
             <Area
               type="monotone"
               dataKey="total_ars"
-              stroke="#6366f1"
+              stroke="#3d77b8"
               strokeWidth={2}
               fill="url(#colorTotal)"
             />

@@ -1,5 +1,5 @@
 import { VStack, Heading } from "@chakra-ui/react";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getUser } from "@/lib/supabase/server";
 import { InvestmentForm } from "@/components/investments/InvestmentForm";
 import { InvestmentList } from "@/components/investments/InvestmentList";
 import { InvestmentChart } from "@/components/investments/InvestmentChart";
@@ -7,10 +7,7 @@ import { getCryptoPrices } from "@/lib/api/crypto-prices";
 import { getDolarBlue } from "@/lib/api/exchange-rates";
 
 export default async function InvestmentsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [user, supabase] = await Promise.all([getUser(), createClient()]);
 
   const [{ data: platforms }, { data: investments }, cryptoPrices, dolarBlue] =
     await Promise.all([

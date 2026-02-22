@@ -5,7 +5,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navItems } from "@/lib/constants/navigation";
 
-export function Sidebar() {
+interface SidebarProps {
+  rates?: { label: string; value: string }[];
+}
+
+export function Sidebar({ rates }: SidebarProps) {
   const pathname = usePathname();
 
   return (
@@ -21,7 +25,8 @@ export function Sidebar() {
       position="fixed"
       left="0"
       top="0"
-      display={{ base: "none", md: "block" }}
+      display={{ base: "none", md: "flex" }}
+      flexDirection="column"
     >
       <Link href="/dashboard">
         <Box px="3" mb="8">
@@ -55,7 +60,7 @@ export function Sidebar() {
                 transition="all 0.15s"
                 cursor="pointer"
               >
-                <Text fontSize="lg">{item.icon}</Text>
+                {item.icon}
                 <Text fontSize="sm" fontWeight={isActive ? "semibold" : "normal"}>
                   {item.label}
                 </Text>
@@ -64,6 +69,22 @@ export function Sidebar() {
           );
         })}
       </VStack>
+
+      {rates && rates.length > 0 && (
+        <Box mt="auto" px="3" pt="4" borderTop="1px solid" borderColor="border.card">
+          <Text fontSize="xs" fontWeight="semibold" color="fg.muted" mb="2">
+            Cotizaciones
+          </Text>
+          <VStack gap="1.5" align="stretch">
+            {rates.map((rate) => (
+              <Flex key={rate.label} justify="space-between" align="center">
+                <Text fontSize="xs" color="fg.muted">{rate.label}</Text>
+                <Text fontSize="xs" fontWeight="semibold" color="fg.heading">{rate.value}</Text>
+              </Flex>
+            ))}
+          </VStack>
+        </Box>
+      )}
     </Box>
   );
 }

@@ -41,9 +41,7 @@ export function BottomNav() {
                 transition="all 0.15s"
                 cursor="pointer"
               >
-                <Text fontSize="xl" lineHeight="1">
-                  {item.icon}
-                </Text>
+                {item.icon}
                 <Text
                   fontSize="2xs"
                   fontWeight={isActive ? "semibold" : "normal"}

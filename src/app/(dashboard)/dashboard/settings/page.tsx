@@ -1,12 +1,9 @@
 import { VStack, Heading } from "@chakra-ui/react";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getUser } from "@/lib/supabase/server";
 import { PlatformManager } from "@/components/settings/PlatformManager";
 
 export default async function SettingsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [user, supabase] = await Promise.all([getUser(), createClient()]);
 
   const { data: platforms } = await supabase
     .from("platforms")

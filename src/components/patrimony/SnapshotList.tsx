@@ -48,7 +48,7 @@ export function SnapshotList({ snapshots, platforms }: SnapshotListProps) {
     if (data) {
       setLoadedItems((prev) => ({
         ...prev,
-        [snapshotId]: data.map((item) => ({
+        [snapshotId]: data.map((item: any) => ({
           ...item,
           platform_name: platformMap[item.platform_id] || "Desconocida",
         })),

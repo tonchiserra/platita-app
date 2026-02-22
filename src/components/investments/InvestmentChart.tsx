@@ -162,7 +162,7 @@ export function InvestmentChart({ data }: InvestmentChartProps) {
             />
             <Tooltip content={<CustomTooltip mask={mask} />} />
             <Legend />
-            <Bar dataKey="Invertido" fill="#818cf8" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Invertido" fill="#6397ce" radius={[4, 4, 0, 0]} />
             <Bar dataKey="Valor actual" fill="#34d399" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
