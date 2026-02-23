@@ -4,6 +4,7 @@ import { ExpenseForm } from "@/components/expenses/ExpenseForm";
 import { ExpenseList } from "@/components/expenses/ExpenseList";
 import { ExpenseCategoryChart } from "@/components/expenses/ExpenseCategoryChart";
 import { ExpenseTrendChart } from "@/components/expenses/ExpenseTrendChart";
+import { getDolarBlue } from "@/lib/api/exchange-rates";
 
 function buildMonthKey(date: string) {
   return date.slice(0, 7);
@@ -17,13 +18,24 @@ function formatMonthLabel(key: string) {
 export default async function ExpensesPage() {
   const [user, supabase] = await Promise.all([getUser(), createClient()]);
 
-  const { data: expenses } = await supabase
-    .from("expenses")
-    .select("*, platform:platforms(*)")
-    .eq("user_id", user!.id)
-    .order("date", { ascending: false });
+  const [{ data: expenses }, dolarBlue] = await Promise.all([
+    supabase
+      .from("expenses")
+      .select("*, platform:platforms(*)")
+      .eq("user_id", user!.id)
+      .order("date", { ascending: false }),
+    getDolarBlue(),
+  ]);
 
   const allExpenses = expenses ?? [];
+
+  const usdRate = dolarBlue?.venta ?? 0;
+  const toArs = (row: { amount: number; currency: string }) => {
+    const amount = Number(row.amount);
+    if (row.currency === "USD") return amount * usdRate;
+    if (row.currency === "EUR") return amount * usdRate;
+    return amount;
+  };
 
   // Current and previous month keys
   const now = new Date();
@@ -35,9 +47,9 @@ export default async function ExpensesPage() {
   const curMonthExpenses = allExpenses.filter((e) => buildMonthKey(e.date) === curMonth);
   const categoryMap = new Map<string, number>();
   for (const e of curMonthExpenses) {
-    categoryMap.set(e.category, (categoryMap.get(e.category) ?? 0) + Number(e.amount));
+    categoryMap.set(e.category, (categoryMap.get(e.category) ?? 0) + toArs(e));
   }
-  const categoryTotal = curMonthExpenses.reduce((s, e) => s + Number(e.amount), 0);
+  const categoryTotal = curMonthExpenses.reduce((s, e) => s + toArs(e), 0);
   const categoryData = [...categoryMap.entries()]
     .map(([category, amount]) => ({
       category,
@@ -49,7 +61,7 @@ export default async function ExpensesPage() {
   // Previous month total for % change
   const prevMonthTotal = allExpenses
     .filter((e) => buildMonthKey(e.date) === prevMonth)
-    .reduce((s, e) => s + Number(e.amount), 0);
+    .reduce((s, e) => s + toArs(e), 0);
   const categoryChange = prevMonthTotal > 0
     ? ((categoryTotal - prevMonthTotal) / prevMonthTotal) * 100
     : undefined;
@@ -58,7 +70,7 @@ export default async function ExpensesPage() {
   const monthMap = new Map<string, number>();
   for (const e of allExpenses) {
     const key = buildMonthKey(e.date);
-    monthMap.set(key, (monthMap.get(key) ?? 0) + Number(e.amount));
+    monthMap.set(key, (monthMap.get(key) ?? 0) + toArs(e));
   }
   const sortedMonths = [...monthMap.keys()].sort();
   const last12 = sortedMonths.slice(-12);

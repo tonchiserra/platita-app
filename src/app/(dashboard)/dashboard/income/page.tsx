@@ -4,6 +4,7 @@ import { IncomeForm } from "@/components/income/IncomeForm";
 import { IncomeList } from "@/components/income/IncomeList";
 import { IncomeSourceChart } from "@/components/income/IncomeSourceChart";
 import { IncomeTrendChart } from "@/components/income/IncomeTrendChart";
+import { getDolarBlue } from "@/lib/api/exchange-rates";
 
 function buildMonthKey(date: string) {
   return date.slice(0, 7);
@@ -17,7 +18,7 @@ function formatMonthLabel(key: string) {
 export default async function IncomePage() {
   const [user, supabase] = await Promise.all([getUser(), createClient()]);
 
-  const [{ data: platforms }, { data: incomes }] = await Promise.all([
+  const [{ data: platforms }, { data: incomes }, dolarBlue] = await Promise.all([
     supabase
       .from("platforms")
       .select("*")
@@ -29,9 +30,18 @@ export default async function IncomePage() {
       .select("*, platform:platforms(*)")
       .eq("user_id", user!.id)
       .order("date", { ascending: false }),
+    getDolarBlue(),
   ]);
 
   const allIncomes = incomes ?? [];
+
+  const usdRate = dolarBlue?.venta ?? 0;
+  const toArs = (row: { amount: number; currency: string }) => {
+    const amount = Number(row.amount);
+    if (row.currency === "USD") return amount * usdRate;
+    if (row.currency === "EUR") return amount * usdRate; // EUR≈USD approximation
+    return amount;
+  };
 
   // Current and previous month keys
   const now = new Date();
@@ -39,13 +49,14 @@ export default async function IncomePage() {
   const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
 
-  // Source breakdown for current month
+  // Source breakdown for current month (grouped by source + currency)
   const curMonthIncomes = allIncomes.filter((i) => buildMonthKey(i.date) === curMonth);
   const sourceMap = new Map<string, number>();
   for (const i of curMonthIncomes) {
-    sourceMap.set(i.source, (sourceMap.get(i.source) ?? 0) + Number(i.amount));
+    const key = i.currency !== "ARS" ? `${i.source} (${i.currency})` : i.source;
+    sourceMap.set(key, (sourceMap.get(key) ?? 0) + toArs(i));
   }
-  const sourceTotal = curMonthIncomes.reduce((s, i) => s + Number(i.amount), 0);
+  const sourceTotal = curMonthIncomes.reduce((s, i) => s + toArs(i), 0);
   const sourceData = [...sourceMap.entries()]
     .map(([source, amount]) => ({
       source,
@@ -57,7 +68,7 @@ export default async function IncomePage() {
   // Previous month total for % change
   const prevMonthTotal = allIncomes
     .filter((i) => buildMonthKey(i.date) === prevMonth)
-    .reduce((s, i) => s + Number(i.amount), 0);
+    .reduce((s, i) => s + toArs(i), 0);
   const sourceChange = prevMonthTotal > 0
     ? ((sourceTotal - prevMonthTotal) / prevMonthTotal) * 100
     : undefined;
@@ -66,7 +77,7 @@ export default async function IncomePage() {
   const monthMap = new Map<string, number>();
   for (const i of allIncomes) {
     const key = buildMonthKey(i.date);
-    monthMap.set(key, (monthMap.get(key) ?? 0) + Number(i.amount));
+    monthMap.set(key, (monthMap.get(key) ?? 0) + toArs(i));
   }
   const sortedMonths = [...monthMap.keys()].sort();
   const last12 = sortedMonths.slice(-12);

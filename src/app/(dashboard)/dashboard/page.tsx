@@ -62,13 +62,13 @@ export default async function DashboardPage() {
       .maybeSingle(),
     supabase
       .from("expenses")
-      .select("amount, category, date")
+      .select("amount, currency, category, date")
       .eq("user_id", user!.id)
       .gte("date", twelveAgoStr)
       .order("date", { ascending: false }),
     supabase
       .from("incomes")
-      .select("amount, source, date")
+      .select("amount, currency, source, date")
       .eq("user_id", user!.id)
       .gte("date", twelveAgoStr)
       .order("date", { ascending: false }),
@@ -81,16 +81,36 @@ export default async function DashboardPage() {
   const allExpenses = recentExpenses ?? [];
   const allIncomes = recentIncomes ?? [];
 
+  // Exchange rates (needed for multi-currency conversion)
+  const usdRate = dolarBlue?.venta ?? 0;
+  const eurRate = euroBlue?.venta ?? 0;
+  const btcUsd = cryptoPrices?.bitcoin?.usd ?? 0;
+  const ethUsd = cryptoPrices?.ethereum?.usd ?? 0;
+
+  function convertToArs(amount: number, currency: string): number {
+    switch (currency) {
+      case "ARS": return amount;
+      case "USD": return amount * usdRate;
+      case "EUR": return amount * eurRate;
+      case "BTC": return amount * btcUsd * usdRate;
+      case "ETH": return amount * ethUsd * usdRate;
+      default: return amount;
+    }
+  }
+
+  const toArs = (row: { amount: number; currency: string }) =>
+    convertToArs(Number(row.amount), row.currency);
+
   // Current + previous month filtering
   const curExpenses = allExpenses.filter((e) => buildMonthKey(e.date) === curMonth);
   const prevExpenses = allExpenses.filter((e) => buildMonthKey(e.date) === prevMonth);
   const curIncomes = allIncomes.filter((i) => buildMonthKey(i.date) === curMonth);
   const prevIncomes = allIncomes.filter((i) => buildMonthKey(i.date) === prevMonth);
 
-  const totalExpenses = curExpenses.reduce((s, e) => s + Number(e.amount), 0);
-  const totalIncomes = curIncomes.reduce((s, i) => s + Number(i.amount), 0);
-  const prevTotalExpenses = prevExpenses.reduce((s, e) => s + Number(e.amount), 0);
-  const prevTotalIncomes = prevIncomes.reduce((s, i) => s + Number(i.amount), 0);
+  const totalExpenses = curExpenses.reduce((s, e) => s + toArs(e), 0);
+  const totalIncomes = curIncomes.reduce((s, i) => s + toArs(i), 0);
+  const prevTotalExpenses = prevExpenses.reduce((s, e) => s + toArs(e), 0);
+  const prevTotalIncomes = prevIncomes.reduce((s, i) => s + toArs(i), 0);
 
   const expensesChange = prevTotalExpenses > 0
     ? ((totalExpenses - prevTotalExpenses) / prevTotalExpenses) * 100
@@ -112,23 +132,6 @@ export default async function DashboardPage() {
     latest && previous && Number(previous.total_ars) > 0
       ? ((Number(latest.total_ars) - Number(previous.total_ars)) / Number(previous.total_ars)) * 100
       : undefined;
-
-  // Exchange rates
-  const usdRate = dolarBlue?.venta ?? 0;
-  const eurRate = euroBlue?.venta ?? 0;
-  const btcUsd = cryptoPrices?.bitcoin?.usd ?? 0;
-  const ethUsd = cryptoPrices?.ethereum?.usd ?? 0;
-
-  function convertToArs(amount: number, currency: string): number {
-    switch (currency) {
-      case "ARS": return amount;
-      case "USD": return amount * usdRate;
-      case "EUR": return amount * eurRate;
-      case "BTC": return amount * btcUsd * usdRate;
-      case "ETH": return amount * ethUsd * usdRate;
-      default: return amount;
-    }
-  }
 
   // Estimated patrimony
   const latestItems = latestWithItems?.patrimony_snapshot_items ?? [];
@@ -164,7 +167,7 @@ export default async function DashboardPage() {
   // === Expense category breakdown (current month) ===
   const categoryMap = new Map<string, number>();
   for (const e of curExpenses) {
-    categoryMap.set(e.category, (categoryMap.get(e.category) ?? 0) + Number(e.amount));
+    categoryMap.set(e.category, (categoryMap.get(e.category) ?? 0) + toArs(e));
   }
   const categoryData = [...categoryMap.entries()]
     .map(([category, amount]) => ({
@@ -174,10 +177,11 @@ export default async function DashboardPage() {
     }))
     .sort((a, b) => b.amount - a.amount);
 
-  // === Income source breakdown (current month) ===
+  // === Income source breakdown (current month, grouped by source + currency) ===
   const sourceMap = new Map<string, number>();
   for (const i of curIncomes) {
-    sourceMap.set(i.source, (sourceMap.get(i.source) ?? 0) + Number(i.amount));
+    const key = i.currency !== "ARS" ? `${i.source} (${i.currency})` : i.source;
+    sourceMap.set(key, (sourceMap.get(key) ?? 0) + toArs(i));
   }
   const sourceData = [...sourceMap.entries()]
     .map(([source, amount]) => ({
@@ -191,7 +195,7 @@ export default async function DashboardPage() {
   const expMonthMap = new Map<string, number>();
   for (const e of allExpenses) {
     const key = buildMonthKey(e.date);
-    expMonthMap.set(key, (expMonthMap.get(key) ?? 0) + Number(e.amount));
+    expMonthMap.set(key, (expMonthMap.get(key) ?? 0) + toArs(e));
   }
   const expSortedMonths = [...expMonthMap.keys()].sort();
   const expTrendData = expSortedMonths.map((key, i) => {
@@ -206,7 +210,7 @@ export default async function DashboardPage() {
   const incMonthMap = new Map<string, number>();
   for (const i of allIncomes) {
     const key = buildMonthKey(i.date);
-    incMonthMap.set(key, (incMonthMap.get(key) ?? 0) + Number(i.amount));
+    incMonthMap.set(key, (incMonthMap.get(key) ?? 0) + toArs(i));
   }
   const incSortedMonths = [...incMonthMap.keys()].sort();
   const incTrendData = incSortedMonths.map((key, i) => {
