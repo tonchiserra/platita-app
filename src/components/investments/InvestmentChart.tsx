@@ -22,6 +22,7 @@ interface AssetData {
 
 interface InvestmentChartProps {
   data: AssetData[];
+  assetsWithoutPrice?: string[];
 }
 
 function CustomTooltip({ active, payload, label, mask }: any) {
@@ -48,7 +49,7 @@ function CustomTooltip({ active, payload, label, mask }: any) {
   );
 }
 
-export function InvestmentChart({ data }: InvestmentChartProps) {
+export function InvestmentChart({ data, assetsWithoutPrice = [] }: InvestmentChartProps) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
   const { mask } = useMoneyVisibility();
@@ -166,6 +167,11 @@ export function InvestmentChart({ data }: InvestmentChartProps) {
             <Bar dataKey="Valor actual" fill="#34d399" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
+      )}
+      {assetsWithoutPrice.length > 0 && (
+        <Text fontSize="xs" color="fg.muted" mt="3">
+          El valor actual de {assetsWithoutPrice.join(", ")} no está disponible porque no son criptomonedas con cotización automática.
+        </Text>
       )}
     </Box>
   );
