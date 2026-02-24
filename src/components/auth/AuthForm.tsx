@@ -53,8 +53,8 @@ export function AuthForm({ mode }: AuthFormProps) {
         return;
       }
 
-      setSuccess("Revisá tu email para confirmar tu cuenta");
-      setLoading(false);
+      // If email confirmation is enabled in Supabase, show a message instead of redirecting
+      router.push("/dashboard");
     }
   };
 
