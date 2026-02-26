@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Box, Flex, Text, Button } from "@chakra-ui/react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
@@ -8,6 +9,7 @@ import type { InvestmentWithPlatform } from "@/types/database";
 import { EmptyState } from "@/components/shared/EmptyState";
 import type { Currency } from "@/lib/constants/currencies";
 import { useMoneyVisibility } from "@/lib/context/money-visibility";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 interface InvestmentListProps {
   investments: InvestmentWithPlatform[];
@@ -16,6 +18,7 @@ interface InvestmentListProps {
 export function InvestmentList({ investments }: InvestmentListProps) {
   const router = useRouter();
   const { mask } = useMoneyVisibility();
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const handleDelete = async (id: string) => {
     const supabase = createClient();
@@ -104,13 +107,19 @@ export function InvestmentList({ investments }: InvestmentListProps) {
               variant="ghost"
               color="fg.muted"
               _hover={{ color: "red.400" }}
-              onClick={() => handleDelete(inv.id)}
+              onClick={() => setDeleteId(inv.id)}
             >
               ✕
             </Button>
           </Flex>
         </Flex>
       ))}
+      <ConfirmDialog
+        open={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={() => deleteId && handleDelete(deleteId)}
+        title="Eliminar inversión"
+      />
     </Box>
   );
 }

@@ -9,6 +9,7 @@ import type { PatrimonySnapshot, PatrimonySnapshotItem, Platform } from "@/types
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CURRENCY_SYMBOLS, type Currency } from "@/lib/constants/currencies";
 import { useMoneyVisibility } from "@/lib/context/money-visibility";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 interface SnapshotListProps {
   snapshots: PatrimonySnapshot[];
@@ -25,6 +26,7 @@ export function SnapshotList({ snapshots, platforms }: SnapshotListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loadedItems, setLoadedItems] = useState<LoadedItems>({});
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const platformMap = Object.fromEntries(platforms.map((p) => [p.id, p.name]));
 
@@ -57,8 +59,7 @@ export function SnapshotList({ snapshots, platforms }: SnapshotListProps) {
     setLoadingId(null);
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDelete = async (id: string) => {
     const supabase = createClient();
     await supabase.from("patrimony_snapshots").delete().eq("id", id);
     router.refresh();
@@ -90,6 +91,7 @@ export function SnapshotList({ snapshots, platforms }: SnapshotListProps) {
   }
 
   return (
+    <>
     <Box
       bg="bg.card"
       borderRadius="xl"
@@ -155,7 +157,7 @@ export function SnapshotList({ snapshots, platforms }: SnapshotListProps) {
                   variant="ghost"
                   color="fg.muted"
                   _hover={{ color: "red.400" }}
-                  onClick={(e) => handleDelete(snapshot.id, e)}
+                  onClick={(e) => { e.stopPropagation(); setDeleteId(snapshot.id); }}
                 >
                   ✕
                 </Button>
@@ -208,5 +210,12 @@ export function SnapshotList({ snapshots, platforms }: SnapshotListProps) {
         );
       })}
     </Box>
+      <ConfirmDialog
+        open={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={() => deleteId && handleDelete(deleteId)}
+        title="Eliminar snapshot"
+      />
+    </>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Box, Collapsible, Flex, Text, Button } from "@chakra-ui/react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
@@ -8,6 +8,7 @@ import { formatCurrency, formatDate, formatPercentage } from "@/lib/utils/format
 import type { IncomeWithPlatform } from "@/types/database";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { useMoneyVisibility } from "@/lib/context/money-visibility";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 interface MonthGroup {
   key: string;
@@ -54,6 +55,7 @@ export function IncomeList({ incomes }: IncomeListProps) {
   const router = useRouter();
   const { mask } = useMoneyVisibility();
   const groups = useMemo(() => groupByMonth(incomes), [incomes]);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const handleDelete = async (id: string) => {
     const supabase = createClient();
@@ -159,7 +161,7 @@ export function IncomeList({ incomes }: IncomeListProps) {
                       variant="ghost"
                       color="fg.muted"
                       _hover={{ color: "red.400" }}
-                      onClick={() => handleDelete(income.id)}
+                      onClick={() => setDeleteId(income.id)}
                     >
                       ✕
                     </Button>
@@ -170,6 +172,12 @@ export function IncomeList({ incomes }: IncomeListProps) {
           </Box>
         </Collapsible.Root>
       ))}
+      <ConfirmDialog
+        open={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={() => deleteId && handleDelete(deleteId)}
+        title="Eliminar ingreso"
+      />
     </Box>
   );
 }

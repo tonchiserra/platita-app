@@ -1,10 +1,17 @@
+import dynamic from "next/dynamic";
 import { VStack, Heading, SimpleGrid } from "@chakra-ui/react";
 import { createClient, getUser } from "@/lib/supabase/server";
 import { ExpenseForm } from "@/components/expenses/ExpenseForm";
 import { ExpenseList } from "@/components/expenses/ExpenseList";
-import { ExpenseCategoryChart } from "@/components/expenses/ExpenseCategoryChart";
-import { ExpenseTrendChart } from "@/components/expenses/ExpenseTrendChart";
+import { LazySection } from "@/components/shared/LazySection";
 import { getDolarBlue } from "@/lib/api/exchange-rates";
+
+const ExpenseCategoryChart = dynamic(() =>
+  import("@/components/expenses/ExpenseCategoryChart").then((m) => m.ExpenseCategoryChart)
+);
+const ExpenseTrendChart = dynamic(() =>
+  import("@/components/expenses/ExpenseTrendChart").then((m) => m.ExpenseTrendChart)
+);
 
 function buildMonthKey(date: string) {
   return date.slice(0, 7);
@@ -88,11 +95,15 @@ export default async function ExpensesPage() {
         Gastos
       </Heading>
       <ExpenseForm />
-      <SimpleGrid columns={{ base: 1, md: 2 }} gap="4">
-        <ExpenseCategoryChart data={categoryData} total={categoryTotal} change={categoryChange} />
-        <ExpenseTrendChart data={trendData} />
-      </SimpleGrid>
-      <ExpenseList expenses={allExpenses} />
+      <LazySection minHeight="300px">
+        <SimpleGrid columns={{ base: 1, md: 2 }} gap="4">
+          <ExpenseCategoryChart data={categoryData} total={categoryTotal} change={categoryChange} />
+          <ExpenseTrendChart data={trendData} />
+        </SimpleGrid>
+      </LazySection>
+      <LazySection minHeight="200px">
+        <ExpenseList expenses={allExpenses} />
+      </LazySection>
     </VStack>
   );
 }

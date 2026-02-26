@@ -20,7 +20,8 @@ export function Sidebar({ rates }: SidebarProps) {
       bg="bg.card"
       borderRight="1px solid"
       borderColor="border.card"
-      py="6"
+      pt="10px"
+      pb="6"
       px="3"
       position="fixed"
       left="0"
@@ -33,7 +34,7 @@ export function Sidebar({ rates }: SidebarProps) {
           <Image
             src="/platita-logo.svg"
             alt="Platita"
-            h="32px"
+            h="48px"
             _dark={{ filter: "invert(1) hue-rotate(180deg)" }}
           />
         </Box>

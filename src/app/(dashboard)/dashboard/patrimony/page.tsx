@@ -1,11 +1,18 @@
+import dynamic from "next/dynamic";
 import { VStack, Heading } from "@chakra-ui/react";
 import { createClient, getUser } from "@/lib/supabase/server";
 import { SnapshotForm } from "@/components/patrimony/SnapshotForm";
 import { SnapshotList } from "@/components/patrimony/SnapshotList";
-import { PatrimonyChart } from "@/components/dashboard/PatrimonyChart";
-import { PatrimonyBreakdownChart } from "@/components/patrimony/PatrimonyBreakdownChart";
+import { LazySection } from "@/components/shared/LazySection";
 import { getDolarBlue, getEuroBlue } from "@/lib/api/exchange-rates";
 import { getCryptoPrices } from "@/lib/api/crypto-prices";
+
+const PatrimonyChart = dynamic(() =>
+  import("@/components/dashboard/PatrimonyChart").then((m) => m.PatrimonyChart)
+);
+const PatrimonyBreakdownChart = dynamic(() =>
+  import("@/components/patrimony/PatrimonyBreakdownChart").then((m) => m.PatrimonyBreakdownChart)
+);
 
 export default async function PatrimonyPage() {
   const [user, supabase] = await Promise.all([getUser(), createClient()]);
@@ -81,11 +88,17 @@ export default async function PatrimonyPage() {
         Patrimonio
       </Heading>
       <SnapshotForm platforms={platforms ?? []} />
-      <PatrimonyChart data={chartData} />
+      <LazySection minHeight="300px">
+        <PatrimonyChart data={chartData} />
+      </LazySection>
       {breakdownData.length > 0 && (
-        <PatrimonyBreakdownChart data={breakdownData} totalArs={totalArs} />
+        <LazySection minHeight="300px">
+          <PatrimonyBreakdownChart data={breakdownData} totalArs={totalArs} />
+        </LazySection>
       )}
-      <SnapshotList snapshots={snapshots ?? []} platforms={platforms ?? []} />
+      <LazySection minHeight="200px">
+        <SnapshotList snapshots={snapshots ?? []} platforms={platforms ?? []} />
+      </LazySection>
     </VStack>
   );
 }

@@ -1,10 +1,17 @@
+import dynamic from "next/dynamic";
 import { VStack, Heading, SimpleGrid } from "@chakra-ui/react";
 import { createClient, getUser } from "@/lib/supabase/server";
 import { IncomeForm } from "@/components/income/IncomeForm";
 import { IncomeList } from "@/components/income/IncomeList";
-import { IncomeSourceChart } from "@/components/income/IncomeSourceChart";
-import { IncomeTrendChart } from "@/components/income/IncomeTrendChart";
+import { LazySection } from "@/components/shared/LazySection";
 import { getDolarBlue } from "@/lib/api/exchange-rates";
+
+const IncomeSourceChart = dynamic(() =>
+  import("@/components/income/IncomeSourceChart").then((m) => m.IncomeSourceChart)
+);
+const IncomeTrendChart = dynamic(() =>
+  import("@/components/income/IncomeTrendChart").then((m) => m.IncomeTrendChart)
+);
 
 function buildMonthKey(date: string) {
   return date.slice(0, 7);
@@ -95,11 +102,15 @@ export default async function IncomePage() {
         Ingresos
       </Heading>
       <IncomeForm platforms={platforms ?? []} />
-      <SimpleGrid columns={{ base: 1, md: 2 }} gap="4">
-        <IncomeSourceChart data={sourceData} total={sourceTotal} change={sourceChange} />
-        <IncomeTrendChart data={trendData} />
-      </SimpleGrid>
-      <IncomeList incomes={allIncomes} />
+      <LazySection minHeight="300px">
+        <SimpleGrid columns={{ base: 1, md: 2 }} gap="4">
+          <IncomeSourceChart data={sourceData} total={sourceTotal} change={sourceChange} />
+          <IncomeTrendChart data={trendData} />
+        </SimpleGrid>
+      </LazySection>
+      <LazySection minHeight="200px">
+        <IncomeList incomes={allIncomes} />
+      </LazySection>
     </VStack>
   );
 }

@@ -1,16 +1,31 @@
+import dynamic from "next/dynamic";
 import { VStack, SimpleGrid } from "@chakra-ui/react";
 import { createClient, getUser } from "@/lib/supabase/server";
 import { SummaryCards } from "@/components/dashboard/SummaryCards";
-import { PatrimonyChart } from "@/components/dashboard/PatrimonyChart";
 import { ExchangeRates } from "@/components/dashboard/ExchangeRates";
-import { ExpenseCategoryChart } from "@/components/expenses/ExpenseCategoryChart";
-import { ExpenseTrendChart } from "@/components/expenses/ExpenseTrendChart";
-import { IncomeSourceChart } from "@/components/income/IncomeSourceChart";
-import { IncomeTrendChart } from "@/components/income/IncomeTrendChart";
-import { PatrimonyBreakdownChart } from "@/components/patrimony/PatrimonyBreakdownChart";
+import { LazySection } from "@/components/shared/LazySection";
 import { getDolarBlue, getEuroBlue } from "@/lib/api/exchange-rates";
 import { getCryptoPrices } from "@/lib/api/crypto-prices";
 import { formatCurrency } from "@/lib/utils/format";
+
+const ExpenseCategoryChart = dynamic(() =>
+  import("@/components/expenses/ExpenseCategoryChart").then((m) => m.ExpenseCategoryChart)
+);
+const ExpenseTrendChart = dynamic(() =>
+  import("@/components/expenses/ExpenseTrendChart").then((m) => m.ExpenseTrendChart)
+);
+const IncomeSourceChart = dynamic(() =>
+  import("@/components/income/IncomeSourceChart").then((m) => m.IncomeSourceChart)
+);
+const IncomeTrendChart = dynamic(() =>
+  import("@/components/income/IncomeTrendChart").then((m) => m.IncomeTrendChart)
+);
+const PatrimonyChart = dynamic(() =>
+  import("@/components/dashboard/PatrimonyChart").then((m) => m.PatrimonyChart)
+);
+const PatrimonyBreakdownChart = dynamic(() =>
+  import("@/components/patrimony/PatrimonyBreakdownChart").then((m) => m.PatrimonyBreakdownChart)
+);
 
 function buildMonthKey(date: string) {
   return date.slice(0, 7);
@@ -274,19 +289,31 @@ export default async function DashboardPage() {
         incomeChange={incomeChange}
         balanceChange={balanceChange}
       />
-      <SimpleGrid columns={{ base: 1, md: 2 }} gap="4">
-        <ExpenseCategoryChart data={categoryData} total={totalExpenses} change={expensesChange} />
-        <IncomeSourceChart data={sourceData} total={totalIncomes} change={incomeChange} />
-      </SimpleGrid>
-      <SimpleGrid columns={{ base: 1, md: 2 }} gap="4">
-        <ExpenseTrendChart data={expTrendData} />
-        <IncomeTrendChart data={incTrendData} />
-      </SimpleGrid>
-      <PatrimonyChart data={sorted} />
+      <LazySection minHeight="300px">
+        <SimpleGrid columns={{ base: 1, md: 2 }} gap="4">
+          <ExpenseCategoryChart data={categoryData} total={totalExpenses} change={expensesChange} />
+          <IncomeSourceChart data={sourceData} total={totalIncomes} change={incomeChange} />
+        </SimpleGrid>
+      </LazySection>
+      <LazySection minHeight="300px">
+        <SimpleGrid columns={{ base: 1, md: 2 }} gap="4">
+          <ExpenseTrendChart data={expTrendData} />
+          <IncomeTrendChart data={incTrendData} />
+        </SimpleGrid>
+      </LazySection>
+      <LazySection minHeight="300px">
+        <PatrimonyChart data={sorted} />
+      </LazySection>
       {breakdownData.length > 0 && (
-        <PatrimonyBreakdownChart data={breakdownData} totalArs={breakdownTotal} />
+        <LazySection minHeight="300px">
+          <PatrimonyBreakdownChart data={breakdownData} totalArs={breakdownTotal} />
+        </LazySection>
       )}
-      {rates.length > 0 && <ExchangeRates rates={rates} updatedAt={updatedAt} />}
+      {rates.length > 0 && (
+        <LazySection minHeight="100px">
+          <ExchangeRates rates={rates} updatedAt={updatedAt} />
+        </LazySection>
+      )}
     </VStack>
   );
 }
