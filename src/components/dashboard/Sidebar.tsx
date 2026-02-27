@@ -34,7 +34,7 @@ export function Sidebar({ rates }: SidebarProps) {
           <Image
             src="/platita-logo.svg"
             alt="Platita"
-            h="48px"
+            h="36px"
             _dark={{ filter: "invert(1) hue-rotate(180deg)" }}
           />
         </Box>

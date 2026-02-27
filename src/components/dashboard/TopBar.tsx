@@ -36,7 +36,7 @@ export function TopBar({ userEmail }: TopBarProps) {
         <Image
           src="/platita-logo.svg"
           alt="Platita"
-          h="48px"
+          h="36px"
           display={{ base: "block", md: "none" }}
           _dark={{ filter: "invert(1) hue-rotate(180deg)" }}
         />
