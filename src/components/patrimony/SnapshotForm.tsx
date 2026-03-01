@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Select } from "@/components/shared/Select";
 import { Box, Button, Flex, Input, Text, VStack, Heading } from "@chakra-ui/react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import type { Platform } from "@/types/database";
+import { formatCurrency } from "@/lib/utils/format";
+import { convertToArs } from "@/lib/utils/currency-conversion";
+import type { Platform, ExchangeRates, PatrimonySnapshotFull } from "@/types/database";
 import { CURRENCIES, PLATFORM_TYPES, PLATFORM_TYPE_LABELS } from "@/lib/constants/currencies";
 
 interface CurrencyRow {
@@ -20,6 +22,9 @@ interface PlatformBalances {
 
 interface SnapshotFormProps {
   platforms: Platform[];
+  exchangeRates: ExchangeRates;
+  editingSnapshot: PatrimonySnapshotFull | null;
+  onClose: () => void;
 }
 
 let rowCounter = 0;
@@ -27,15 +32,42 @@ function nextRowId() {
   return `row_${++rowCounter}`;
 }
 
-export function SnapshotForm({ platforms: initialPlatforms }: SnapshotFormProps) {
+function buildNotesFromRates(rates: ExchangeRates): string {
+  const parts: string[] = [];
+  if (rates.usdRate > 0) {
+    parts.push(`Dolar ${Math.round(rates.usdRate)}`);
+  }
+  if (rates.btcUsd > 0) {
+    const btcK =
+      rates.btcUsd >= 1000
+        ? `${Math.round(rates.btcUsd / 1000)}k`
+        : Math.round(rates.btcUsd).toString();
+    parts.push(`BTC ${btcK}`);
+  }
+  if (rates.ethUsd > 0) {
+    const ethVal =
+      rates.ethUsd >= 1000
+        ? `${(rates.ethUsd / 1000).toFixed(1)}k`
+        : Math.round(rates.ethUsd).toString();
+    parts.push(`ETH ${ethVal}`);
+  }
+  return parts.join(", ");
+}
+
+export function SnapshotForm({
+  platforms: initialPlatforms,
+  exchangeRates,
+  editingSnapshot,
+  onClose,
+}: SnapshotFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [isOpen, setIsOpen] = useState(false);
   const [platforms, setPlatforms] = useState(initialPlatforms);
   const [balances, setBalances] = useState<PlatformBalances>({});
   const [notes, setNotes] = useState("");
-  const [ratesLoading, setRatesLoading] = useState(false);
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [hiddenPlatformIds, setHiddenPlatformIds] = useState<Set<string>>(new Set());
 
   // New platform form
   const [showNewPlatform, setShowNewPlatform] = useState(false);
@@ -43,6 +75,8 @@ export function SnapshotForm({ platforms: initialPlatforms }: SnapshotFormProps)
   const [newPlatformType, setNewPlatformType] = useState("bank");
   const [newPlatformCurrency, setNewPlatformCurrency] = useState("ARS");
   const [savingPlatform, setSavingPlatform] = useState(false);
+
+  const isEditing = !!editingSnapshot;
 
   // Initialize balances with one default row per platform
   const initBalances = useCallback((plats: Platform[]) => {
@@ -53,51 +87,96 @@ export function SnapshotForm({ platforms: initialPlatforms }: SnapshotFormProps)
     setBalances(b);
   }, []);
 
+  // Initialize from editing snapshot
+  const initFromSnapshot = useCallback(
+    (snapshot: PatrimonySnapshotFull, plats: Platform[]) => {
+      const b: PlatformBalances = {};
+      // Group items by platform
+      for (const item of snapshot.items) {
+        if (!b[item.platform_id]) {
+          b[item.platform_id] = [];
+        }
+        b[item.platform_id].push({
+          id: nextRowId(),
+          currency: item.currency,
+          amount: String(item.amount),
+        });
+      }
+      // Add empty row for platforms that have no items in this snapshot
+      for (const p of plats) {
+        if (!b[p.id]) {
+          b[p.id] = [{ id: nextRowId(), currency: p.default_currency, amount: "" }];
+        }
+      }
+      setBalances(b);
+      setDate(snapshot.date);
+      setNotes(snapshot.notes || "");
+    },
+    []
+  );
+
   useEffect(() => {
     setPlatforms(initialPlatforms);
-    initBalances(initialPlatforms);
-  }, [initialPlatforms, initBalances]);
+  }, [initialPlatforms]);
 
-  // Fetch exchange rates and auto-fill notes
-  const fetchRatesForNotes = async () => {
-    setRatesLoading(true);
-    try {
-      const [dolarRes, cryptoRes] = await Promise.all([
-        fetch("https://dolarapi.com/v1/dolares/blue").then((r) => r.ok ? r.json() : null).catch(() => null),
-        fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd").then((r) => r.ok ? r.json() : null).catch(() => null),
-      ]);
-
-      const parts: string[] = [];
-      if (dolarRes?.venta) {
-        parts.push(`Dolar ${Math.round(dolarRes.venta)}`);
-      }
-      if (cryptoRes?.bitcoin?.usd) {
-        const btcK = cryptoRes.bitcoin.usd >= 1000
-          ? `${Math.round(cryptoRes.bitcoin.usd / 1000)}k`
-          : Math.round(cryptoRes.bitcoin.usd).toString();
-        parts.push(`BTC ${btcK}`);
-      }
-      if (cryptoRes?.ethereum?.usd) {
-        const ethVal = cryptoRes.ethereum.usd >= 1000
-          ? `${(cryptoRes.ethereum.usd / 1000).toFixed(1)}k`
-          : Math.round(cryptoRes.ethereum.usd).toString();
-        parts.push(`ETH ${ethVal}`);
-      }
-
-      if (parts.length > 0) {
-        setNotes(parts.join(", "));
-      }
-    } catch {
-      // silently fail
+  // Handle edit mode trigger or initialize new form
+  useEffect(() => {
+    if (editingSnapshot) {
+      setError("");
+      initFromSnapshot(editingSnapshot, initialPlatforms);
+    } else {
+      initBalances(initialPlatforms);
+      setNotes(buildNotesFromRates(exchangeRates));
+      setDate(new Date().toISOString().split("T")[0]);
+      setHiddenPlatformIds(new Set());
     }
-    setRatesLoading(false);
+  }, [editingSnapshot, initialPlatforms, initFromSnapshot, initBalances, exchangeRates]);
+
+  // Live total calculation (skip hidden platforms)
+  const liveTotal = useMemo(() => {
+    let total = 0;
+    for (const [platformId, rows] of Object.entries(balances)) {
+      if (hiddenPlatformIds.has(platformId)) continue;
+      for (const row of rows) {
+        const amount = parseFloat(row.amount) || 0;
+        total += convertToArs(amount, row.currency, exchangeRates);
+      }
+    }
+    return total;
+  }, [balances, exchangeRates, hiddenPlatformIds]);
+
+  // Hide/show platforms in the form
+  const hidePlatform = (platformId: string) => {
+    setHiddenPlatformIds((prev) => new Set([...prev, platformId]));
   };
 
-  // When form opens, fetch rates
-  const handleOpen = () => {
-    setIsOpen(true);
-    initBalances(platforms);
-    fetchRatesForNotes();
+  const restorePlatform = (platformId: string) => {
+    setHiddenPlatformIds((prev) => {
+      const next = new Set(prev);
+      next.delete(platformId);
+      return next;
+    });
+    // Ensure the platform has at least one row
+    setBalances((prev) => {
+      if (!prev[platformId] || prev[platformId].length === 0) {
+        const plat = platforms.find((p) => p.id === platformId);
+        return {
+          ...prev,
+          [platformId]: [{ id: nextRowId(), currency: plat?.default_currency || "ARS", amount: "" }],
+        };
+      }
+      return prev;
+    });
+  };
+
+  const visiblePlatforms = platforms.filter((p) => !hiddenPlatformIds.has(p.id));
+  const hiddenPlatforms = platforms.filter((p) => hiddenPlatformIds.has(p.id));
+
+  const handleClose = () => {
+    setError("");
+    setNotes("");
+    setHiddenPlatformIds(new Set());
+    onClose();
   };
 
   // Add currency row to a platform
@@ -172,103 +251,122 @@ export function SnapshotForm({ platforms: initialPlatforms }: SnapshotFormProps)
     setSavingPlatform(false);
   };
 
+  // Collect non-zero items from balances (skip hidden platforms)
+  const collectItems = () => {
+    const items: { platform_id: string; currency: string; amount: number }[] = [];
+    for (const [platformId, rows] of Object.entries(balances)) {
+      if (hiddenPlatformIds.has(platformId)) continue;
+      for (const row of rows) {
+        const amount = parseFloat(row.amount);
+        if (amount && amount !== 0) {
+          items.push({ platform_id: platformId, currency: row.currency, amount });
+        }
+      }
+    }
+    return items;
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    const formData = new FormData(e.currentTarget);
     const supabase = createClient();
-
     const { data: { user } } = await supabase.auth.getUser();
 
-    const date = formData.get("date") as string;
-    const totalArs = parseFloat((formData.get("total_ars") as string) || "0");
+    const items = collectItems();
 
-    const { data: snapshot, error: snapError } = await supabase
-      .from("patrimony_snapshots")
-      .insert({
-        user_id: user!.id,
-        date,
-        total_ars: totalArs,
-        notes: notes || null,
-      })
-      .select("id")
-      .single();
-
-    if (snapError) {
-      setError(snapError.message);
-      setLoading(false);
-      return;
+    // Auto-calculate total ARS
+    let totalArs = 0;
+    for (const item of items) {
+      totalArs += convertToArs(item.amount, item.currency, exchangeRates);
     }
 
-    // Collect items from balances state
-    const items: {
-      snapshot_id: string;
-      platform_id: string;
-      currency: string;
-      amount: number;
-    }[] = [];
+    if (isEditing) {
+      // Update existing snapshot
+      const { error: updateError } = await supabase
+        .from("patrimony_snapshots")
+        .update({ date, total_ars: totalArs, notes: notes || null })
+        .eq("id", editingSnapshot!.id);
 
-    for (const [platformId, rows] of Object.entries(balances)) {
-      for (const row of rows) {
-        const amount = parseFloat(row.amount);
-        if (amount && amount !== 0) {
-          items.push({
-            snapshot_id: snapshot.id,
-            platform_id: platformId,
-            currency: row.currency,
-            amount,
-          });
+      if (updateError) {
+        setError(updateError.message);
+        setLoading(false);
+        return;
+      }
+
+      // Delete old items and insert new ones
+      const { error: deleteError } = await supabase
+        .from("patrimony_snapshot_items")
+        .delete()
+        .eq("snapshot_id", editingSnapshot!.id);
+
+      if (deleteError) {
+        setError(deleteError.message);
+        setLoading(false);
+        return;
+      }
+
+      if (items.length > 0) {
+        const { error: itemsError } = await supabase
+          .from("patrimony_snapshot_items")
+          .insert(items.map((i) => ({ ...i, snapshot_id: editingSnapshot!.id })));
+
+        if (itemsError) {
+          setError(itemsError.message);
+          setLoading(false);
+          return;
+        }
+      }
+    } else {
+      // Create new snapshot
+      const { data: snapshot, error: snapError } = await supabase
+        .from("patrimony_snapshots")
+        .insert({
+          user_id: user!.id,
+          date,
+          total_ars: totalArs,
+          notes: notes || null,
+        })
+        .select("id")
+        .single();
+
+      if (snapError) {
+        setError(snapError.message);
+        setLoading(false);
+        return;
+      }
+
+      if (items.length > 0) {
+        const { error: itemsError } = await supabase
+          .from("patrimony_snapshot_items")
+          .insert(items.map((i) => ({ ...i, snapshot_id: snapshot.id })));
+
+        if (itemsError) {
+          setError(itemsError.message);
+          setLoading(false);
+          return;
         }
       }
     }
 
-    if (items.length > 0) {
-      const { error: itemsError } = await supabase
-        .from("patrimony_snapshot_items")
-        .insert(items);
-
-      if (itemsError) {
-        setError(itemsError.message);
-        setLoading(false);
-        return;
-      }
-    }
-
     setLoading(false);
-    setIsOpen(false);
-    setNotes("");
+    handleClose();
     router.refresh();
   };
-
-  if (!isOpen) {
-    return (
-      <Button
-        onClick={handleOpen}
-        bg="brand.600"
-        color="white"
-        _hover={{ bg: "brand.500" }}
-        alignSelf="flex-start"
-        px="5"
-      >
-        + Agregar
-      </Button>
-    );
-  }
 
   return (
     <Box bg="bg.card" borderRadius="xl" border="1px solid" borderColor="border.card" p="6">
     <form onSubmit={handleSubmit}>
       <Flex justify="space-between" align="center" mb="4">
         <Text fontSize="lg" fontWeight="semibold" color="fg.heading">
-          Nuevo Snapshot de Patrimonio
+          {isEditing ? "Editar Snapshot" : "Nuevo Snapshot de Patrimonio"}
         </Text>
         <Button
           size="sm"
           variant="ghost"
           color="fg.body"
-          onClick={() => setIsOpen(false)}
+          onClick={handleClose}
         >
           Cancelar
         </Button>
@@ -282,7 +380,8 @@ export function SnapshotForm({ platforms: initialPlatforms }: SnapshotFormProps)
               name="date"
               type="date"
               required
-              defaultValue={new Date().toISOString().split("T")[0]}
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
               bg="bg.input"
               border="1px solid"
               borderColor="border.input"
@@ -290,28 +389,18 @@ export function SnapshotForm({ platforms: initialPlatforms }: SnapshotFormProps)
             />
           </Box>
           <Box flex="1" minW="200px">
-            <Text fontSize="sm" color="fg.body" mb="1">Total en ARS</Text>
-            <Input
-              name="total_ars"
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              required
-              bg="bg.input"
-              border="1px solid"
-              borderColor="border.input"
-              color="fg.heading"
-              _placeholder={{ color: "fg.muted" }}
-            />
+            <Text fontSize="sm" color="fg.body" mb="1">Total en ARS (calculado)</Text>
+            <Box bg="bg.hover" borderRadius="lg" px="4" py="2.5">
+              <Text fontSize="lg" fontWeight="bold" color="fg.heading">
+                {formatCurrency(liveTotal)}
+              </Text>
+            </Box>
           </Box>
         </Flex>
 
         <Box>
           <Text fontSize="sm" color="fg.body" mb="1">
-            Notas (opcional){" "}
-            {ratesLoading && (
-              <Text as="span" fontSize="xs" color="fg.muted">cargando cotizaciones...</Text>
-            )}
+            Notas (opcional)
           </Text>
           <Input
             name="notes"
@@ -401,7 +490,7 @@ export function SnapshotForm({ platforms: initialPlatforms }: SnapshotFormProps)
           )}
 
           <VStack gap="4" align="stretch">
-            {platforms.map((platform) => {
+            {visiblePlatforms.map((platform) => {
               const rows = balances[platform.id] || [];
 
               return (
@@ -419,6 +508,16 @@ export function SnapshotForm({ platforms: initialPlatforms }: SnapshotFormProps)
                       px="2"
                     >
                       +
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      color="fg.muted"
+                      _hover={{ color: "red.400" }}
+                      onClick={() => hidePlatform(platform.id)}
+                      px="2"
+                    >
+                      Quitar
                     </Button>
                   </Flex>
 
@@ -468,6 +567,27 @@ export function SnapshotForm({ platforms: initialPlatforms }: SnapshotFormProps)
               );
             })}
           </VStack>
+
+          {hiddenPlatforms.length > 0 && (
+            <Flex gap="2" flexWrap="wrap" mt="3" align="center">
+              <Text fontSize="xs" color="fg.muted">
+                Ocultas:
+              </Text>
+              {hiddenPlatforms.map((p) => (
+                <Button
+                  key={p.id}
+                  size="xs"
+                  variant="outline"
+                  color="fg.body"
+                  borderColor="border.input"
+                  _hover={{ bg: "bg.hover" }}
+                  onClick={() => restorePlatform(p.id)}
+                >
+                  + {p.name}
+                </Button>
+              ))}
+            </Flex>
+          )}
         </Box>
 
         {error && (
@@ -485,7 +605,7 @@ export function SnapshotForm({ platforms: initialPlatforms }: SnapshotFormProps)
           alignSelf="flex-end"
           px="5"
         >
-          Guardar Snapshot
+          {isEditing ? "Guardar cambios" : "Guardar Snapshot"}
         </Button>
       </VStack>
     </form>

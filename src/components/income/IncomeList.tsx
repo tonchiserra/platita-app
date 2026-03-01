@@ -13,12 +13,13 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 interface MonthGroup {
   key: string;
   label: string;
-  total: number;
+  totalArs: number;
+  totalUsd: number;
   change?: number;
   items: IncomeWithPlatform[];
 }
 
-function groupByMonth(incomes: IncomeWithPlatform[]): MonthGroup[] {
+function groupByMonth(incomes: IncomeWithPlatform[], usdRate: number): MonthGroup[] {
   const map = new Map<string, IncomeWithPlatform[]>();
 
   for (const inc of incomes) {
@@ -31,16 +32,20 @@ function groupByMonth(incomes: IncomeWithPlatform[]): MonthGroup[] {
 
   const groups: MonthGroup[] = sortedKeys.map((key) => {
     const items = map.get(key)!;
-    const total = items.reduce((sum, i) => sum + Number(i.amount), 0);
+    const totalArs = items.filter((i) => i.currency === "ARS").reduce((sum, i) => sum + Number(i.amount), 0);
+    const totalUsd = items.filter((i) => i.currency === "USD").reduce((sum, i) => sum + Number(i.amount), 0);
     const d = new Date(key + "-01T00:00:00");
     const label = d.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
-    return { key, label: label.charAt(0).toUpperCase() + label.slice(1), total, items };
+    return { key, label: label.charAt(0).toUpperCase() + label.slice(1), totalArs, totalUsd, items };
   });
 
   for (let i = 0; i < groups.length; i++) {
     const prev = groups[i + 1];
-    if (prev && prev.total > 0) {
-      groups[i].change = ((groups[i].total - prev.total) / prev.total) * 100;
+    if (!prev) continue;
+    const curTotal = groups[i].totalArs + groups[i].totalUsd * usdRate;
+    const prevTotal = prev.totalArs + prev.totalUsd * usdRate;
+    if (prevTotal > 0) {
+      groups[i].change = ((curTotal - prevTotal) / prevTotal) * 100;
     }
   }
 
@@ -49,12 +54,13 @@ function groupByMonth(incomes: IncomeWithPlatform[]): MonthGroup[] {
 
 interface IncomeListProps {
   incomes: IncomeWithPlatform[];
+  usdRate: number;
 }
 
-export function IncomeList({ incomes }: IncomeListProps) {
+export function IncomeList({ incomes, usdRate }: IncomeListProps) {
   const router = useRouter();
   const { mask } = useMoneyVisibility();
-  const groups = useMemo(() => groupByMonth(incomes), [incomes]);
+  const groups = useMemo(() => groupByMonth(incomes, usdRate), [incomes, usdRate]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const handleDelete = async (id: string) => {
@@ -115,8 +121,13 @@ export function IncomeList({ incomes }: IncomeListProps) {
                     </Text>
                   )}
                   <Text fontSize="sm" fontWeight="semibold" color="green.400">
-                    +{mask(formatCurrency(group.total))}
+                    +{mask(formatCurrency(group.totalArs))}
                   </Text>
+                  {group.totalUsd > 0 && (
+                    <Text fontSize="sm" fontWeight="semibold" color="green.400">
+                      +{mask(formatCurrency(group.totalUsd, "USD"))}
+                    </Text>
+                  )}
                 </Flex>
               </Flex>
             </Collapsible.Trigger>

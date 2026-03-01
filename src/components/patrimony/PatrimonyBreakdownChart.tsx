@@ -54,8 +54,11 @@ export function PatrimonyBreakdownChart({ data, totalArs }: PatrimonyBreakdownCh
 
   return (
     <Box bg="bg.card" borderRadius="xl" border="1px solid" borderColor="border.card" p="6">
-      <Text fontSize="lg" fontWeight="semibold" color="fg.heading" mb="4">
+      <Text fontSize="lg" fontWeight="semibold" color="fg.heading" mb="1">
         Distribución del Patrimonio
+      </Text>
+      <Text fontSize="xs" color="fg.muted" mb="4">
+        Basado en el último mes registrado
       </Text>
 
       <Box position="relative">

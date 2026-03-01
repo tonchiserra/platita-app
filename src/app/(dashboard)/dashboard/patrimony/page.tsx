@@ -1,11 +1,11 @@
 import dynamic from "next/dynamic";
-import { VStack, Heading } from "@chakra-ui/react";
 import { createClient, getUser } from "@/lib/supabase/server";
-import { SnapshotForm } from "@/components/patrimony/SnapshotForm";
-import { SnapshotList } from "@/components/patrimony/SnapshotList";
 import { LazySection } from "@/components/shared/LazySection";
 import { getDolarBlue, getEuroBlue } from "@/lib/api/exchange-rates";
 import { getCryptoPrices } from "@/lib/api/crypto-prices";
+import { convertToArs } from "@/lib/utils/currency-conversion";
+import { PatrimonyPageClient } from "@/components/patrimony/PatrimonyPageClient";
+import type { ExchangeRates, PatrimonySnapshotFull } from "@/types/database";
 
 const PatrimonyChart = dynamic(() =>
   import("@/components/dashboard/PatrimonyChart").then((m) => m.PatrimonyChart)
@@ -17,7 +17,7 @@ const PatrimonyBreakdownChart = dynamic(() =>
 export default async function PatrimonyPage() {
   const [user, supabase] = await Promise.all([getUser(), createClient()]);
 
-  const [{ data: platforms }, { data: snapshots }, { data: latestWithItems }, dolarBlue, euroBlue, cryptoPrices] =
+  const [{ data: platforms }, { data: rawSnapshots }, dolarBlue, euroBlue, cryptoPrices] =
     await Promise.all([
       supabase
         .from("platforms")
@@ -27,50 +27,73 @@ export default async function PatrimonyPage() {
         .order("name"),
       supabase
         .from("patrimony_snapshots")
-        .select("*")
+        .select("*, patrimony_snapshot_items(id, snapshot_id, platform_id, currency, amount)")
         .eq("user_id", user!.id)
         .order("date", { ascending: false }),
-      supabase
-        .from("patrimony_snapshots")
-        .select("id, total_ars, patrimony_snapshot_items(platform_id, currency, amount)")
-        .eq("user_id", user!.id)
-        .order("date", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
       getDolarBlue(),
       getEuroBlue(),
       getCryptoPrices(),
     ]);
 
-  const chartData = [...(snapshots ?? [])].reverse().map((s) => ({
+  const exchangeRates: ExchangeRates = {
+    usdRate: dolarBlue?.venta ?? 0,
+    eurRate: euroBlue?.venta ?? 0,
+    btcUsd: cryptoPrices?.bitcoin?.usd ?? 0,
+    ethUsd: cryptoPrices?.ethereum?.usd ?? 0,
+  };
+
+  const platformMap = Object.fromEntries((platforms ?? []).map((p) => [p.id, p.name]));
+
+  // Map raw snapshots to PatrimonySnapshotFull with platform names
+  interface RawSnapshot {
+    id: string;
+    user_id: string;
+    date: string;
+    total_ars: number;
+    notes: string | null;
+    created_at: string;
+    patrimony_snapshot_items: {
+      id: string;
+      snapshot_id: string;
+      platform_id: string;
+      currency: string;
+      amount: number;
+    }[];
+  }
+
+  const snapshotsWithItems: PatrimonySnapshotFull[] = ((rawSnapshots ?? []) as RawSnapshot[]).map((s) => ({
+    id: s.id,
+    user_id: s.user_id,
     date: s.date,
     total_ars: Number(s.total_ars),
+    notes: s.notes,
+    created_at: s.created_at,
+    items: (s.patrimony_snapshot_items ?? []).map((item) => ({
+      id: item.id,
+      snapshot_id: item.snapshot_id,
+      platform_id: item.platform_id,
+      currency: item.currency,
+      amount: Number(item.amount),
+      platform_name: platformMap[item.platform_id] || "Desconocida",
+    })),
   }));
 
-  // Build patrimony breakdown by platform
-  const platformMap = Object.fromEntries((platforms ?? []).map((p) => [p.id, p.name]));
-  const usdRate = dolarBlue?.venta ?? 0;
-  const eurRate = euroBlue?.venta ?? 0;
-  const btcUsd = cryptoPrices?.bitcoin?.usd ?? 0;
-  const ethUsd = cryptoPrices?.ethereum?.usd ?? 0;
+  // Chart data (ascending for time series)
+  const chartData = [...snapshotsWithItems].reverse().map((s) => ({
+    date: s.date,
+    total_ars: s.total_ars,
+  }));
 
-  const latestItems = latestWithItems?.patrimony_snapshot_items ?? [];
+  // Breakdown data from latest snapshot
+  const latestItems = snapshotsWithItems[0]?.items ?? [];
   const platformTotals = new Map<string, number>();
 
   for (const item of latestItems) {
-    const amount = Number((item as any).amount);
-    const currency = (item as any).currency as string;
-    const platformId = (item as any).platform_id as string;
-    let arsValue = 0;
-    switch (currency) {
-      case "ARS": arsValue = amount; break;
-      case "USD": arsValue = amount * usdRate; break;
-      case "EUR": arsValue = amount * eurRate; break;
-      case "BTC": arsValue = amount * btcUsd * usdRate; break;
-      case "ETH": arsValue = amount * ethUsd * usdRate; break;
-      default: arsValue = amount;
-    }
-    platformTotals.set(platformId, (platformTotals.get(platformId) ?? 0) + arsValue);
+    const arsValue = convertToArs(item.amount, item.currency, exchangeRates);
+    platformTotals.set(
+      item.platform_id,
+      (platformTotals.get(item.platform_id) ?? 0) + arsValue
+    );
   }
 
   const totalArs = [...platformTotals.values()].reduce((s, v) => s + v, 0);
@@ -83,11 +106,11 @@ export default async function PatrimonyPage() {
     .sort((a, b) => b.valueArs - a.valueArs);
 
   return (
-    <VStack gap="6" align="stretch">
-      <Heading size="lg" color="fg.heading">
-        Patrimonio
-      </Heading>
-      <SnapshotForm platforms={platforms ?? []} />
+    <PatrimonyPageClient
+      snapshots={snapshotsWithItems}
+      platforms={platforms ?? []}
+      exchangeRates={exchangeRates}
+    >
       <LazySection minHeight="300px">
         <PatrimonyChart data={chartData} />
       </LazySection>
@@ -96,9 +119,6 @@ export default async function PatrimonyPage() {
           <PatrimonyBreakdownChart data={breakdownData} totalArs={totalArs} />
         </LazySection>
       )}
-      <LazySection minHeight="200px">
-        <SnapshotList snapshots={snapshots ?? []} platforms={platforms ?? []} />
-      </LazySection>
-    </VStack>
+    </PatrimonyPageClient>
   );
 }

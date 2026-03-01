@@ -64,6 +64,24 @@ export interface Investment {
   created_at: string;
 }
 
+// Exchange rates snapshot (ARS conversions)
+export interface ExchangeRates {
+  usdRate: number; // ARS per USD (dolar blue venta)
+  eurRate: number; // ARS per EUR (euro blue venta)
+  btcUsd: number; // USD per BTC
+  ethUsd: number; // USD per ETH
+}
+
+// Snapshot item enriched with platform name (for display)
+export interface SnapshotItemWithPlatformName extends PatrimonySnapshotItem {
+  platform_name: string;
+}
+
+// Full snapshot with all items (used in the new SnapshotTable)
+export interface PatrimonySnapshotFull extends PatrimonySnapshot {
+  items: SnapshotItemWithPlatformName[];
+}
+
 // Joined types for queries
 export interface PatrimonySnapshotWithItems extends PatrimonySnapshot {
   items: (PatrimonySnapshotItem & { platform: Platform })[];

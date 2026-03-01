@@ -109,7 +109,7 @@ export default async function IncomePage() {
         </SimpleGrid>
       </LazySection>
       <LazySection minHeight="200px">
-        <IncomeList incomes={allIncomes} />
+        <IncomeList incomes={allIncomes} usdRate={usdRate} />
       </LazySection>
     </VStack>
   );

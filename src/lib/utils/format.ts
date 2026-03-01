@@ -54,6 +54,17 @@ export function formatPercentage(value: number): string {
   return `${sign}${value.toFixed(2)}%`;
 }
 
+export function formatMonthYear(date: string | Date): string {
+  let d: Date;
+  if (typeof date === "string") {
+    d = date.length === 10 ? new Date(date + "T00:00:00") : new Date(date);
+  } else {
+    d = date;
+  }
+  const label = d.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 export function parseArgentineNumber(value: string): number {
   // Argentine format: 1.234.567,89
   return parseFloat(value.replace(/\./g, "").replace(",", "."));
