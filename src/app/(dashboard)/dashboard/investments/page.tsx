@@ -58,11 +58,21 @@ export default async function InvestmentsPage() {
     byAsset[asset].units += Number(inv.units);
   }
 
-  const chartData = Object.entries(byAsset).map(([asset, data]) => ({
-    asset,
-    invested: data.invested,
-    currentValue:
-      priceMap[asset] !== undefined ? data.units * priceMap[asset] : null,
+  const assetSummary = Object.entries(byAsset)
+    .map(([asset, data]) => ({
+      asset,
+      invested: data.invested,
+      units: data.units,
+      avgPrice: data.units > 0 ? data.invested / data.units : null,
+      currentValue:
+        priceMap[asset] !== undefined ? data.units * priceMap[asset] : null,
+    }))
+    .sort((a, b) => b.invested - a.invested);
+
+  const chartData = assetSummary.map((s) => ({
+    asset: s.asset,
+    invested: s.invested,
+    currentValue: s.currentValue,
   }));
 
   const assetsWithoutPrice = chartData
@@ -77,7 +87,11 @@ export default async function InvestmentsPage() {
       <InvestmentForm platforms={platforms ?? []} />
       {(investments ?? []).length > 0 && (
         <LazySection minHeight="300px">
-          <InvestmentChart data={chartData} assetsWithoutPrice={assetsWithoutPrice} />
+          <InvestmentChart
+            data={chartData}
+            assetSummary={assetSummary}
+            assetsWithoutPrice={assetsWithoutPrice}
+          />
         </LazySection>
       )}
       <LazySection minHeight="200px">
