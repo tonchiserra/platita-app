@@ -1,4 +1,4 @@
-import { Box, Heading, Text, VStack } from "@chakra-ui/react";
+import { Box, Image, Text, VStack } from "@chakra-ui/react";
 import { AuthForm } from "@/components/auth/AuthForm";
 
 export default function LoginPage() {
@@ -9,23 +9,27 @@ export default function LoginPage() {
       alignItems="center"
       justifyContent="center"
       bg="bg.page"
+      px="4"
+      py="10"
     >
       <VStack
-        gap="8"
-        p="10"
+        gap="7"
+        p={{ base: "7", md: "9" }}
         bg="bg.card"
         borderRadius="xl"
         borderWidth="1px"
         borderColor="border.card"
         maxW="400px"
         w="full"
-        mx="4"
       >
-        <VStack gap="2">
-          <Heading size="2xl" color="fg.heading" fontWeight="bold">
-            Platita
-          </Heading>
-          <Text color="fg.body" textAlign="center">
+        <VStack gap="3">
+          <Image
+            src="/platita-logo.svg"
+            alt="Platita"
+            h="34px"
+            _dark={{ filter: "invert(1) hue-rotate(180deg)" }}
+          />
+          <Text color="fg.body" fontSize="sm" textAlign="center">
             Tu balance personal, unificado
           </Text>
         </VStack>

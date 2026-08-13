@@ -5,6 +5,7 @@ import { ExpenseForm } from "@/components/expenses/ExpenseForm";
 import { ExpenseList } from "@/components/expenses/ExpenseList";
 import { LazySection } from "@/components/shared/LazySection";
 import { getDolarBlue } from "@/lib/api/exchange-rates";
+import { resolveCategories, iconMap } from "@/lib/utils/expense-categories";
 
 const ExpenseCategoryChart = dynamic(() =>
   import("@/components/expenses/ExpenseCategoryChart").then((m) => m.ExpenseCategoryChart)
@@ -25,14 +26,23 @@ function formatMonthLabel(key: string) {
 export default async function ExpensesPage() {
   const [user, supabase] = await Promise.all([getUser(), createClient()]);
 
-  const [{ data: expenses }, dolarBlue] = await Promise.all([
+  const [{ data: expenses }, dolarBlue, { data: categoryRows }] = await Promise.all([
     supabase
       .from("expenses")
       .select("*, platform:platforms(*)")
       .eq("user_id", user!.id)
       .order("date", { ascending: false }),
     getDolarBlue(),
+    supabase
+      .from("expense_categories")
+      .select("*")
+      .eq("user_id", user!.id)
+      .order("sort_order"),
   ]);
+
+  // Falls back to the built-in list when the user hasn't customised one.
+  const categories = resolveCategories(categoryRows);
+  const icons = iconMap(categories);
 
   const allExpenses = expenses ?? [];
 
@@ -94,15 +104,15 @@ export default async function ExpensesPage() {
       <Heading size="lg" color="fg.heading">
         Gastos
       </Heading>
-      <ExpenseForm />
+      <ExpenseForm categories={categories} />
       <LazySection minHeight="300px">
         <SimpleGrid columns={{ base: 1, md: 2 }} gap="4">
-          <ExpenseCategoryChart data={categoryData} total={categoryTotal} change={categoryChange} />
+          <ExpenseCategoryChart data={categoryData} total={categoryTotal} change={categoryChange} icons={icons} />
           <ExpenseTrendChart data={trendData} />
         </SimpleGrid>
       </LazySection>
       <LazySection minHeight="200px">
-        <ExpenseList expenses={allExpenses} />
+        <ExpenseList expenses={allExpenses} icons={icons} />
       </LazySection>
     </VStack>
   );

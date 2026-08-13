@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { navItems } from "@/lib/constants/navigation";
 
 interface SidebarProps {
-  rates?: { label: string; value: string }[];
+  rates?: { label: string; value: string; token?: string }[];
 }
 
 export function Sidebar({ rates }: SidebarProps) {
@@ -15,14 +15,13 @@ export function Sidebar({ rates }: SidebarProps) {
   return (
     <Box
       as="nav"
-      w="240px"
+      w="248px"
       minH="100vh"
-      bg="bg.card"
+      bg="bg.page"
       borderRight="1px solid"
       borderColor="border.card"
-      pt="10px"
-      pb="6"
-      px="3"
+      pt="5"
+      pb="5"
       position="fixed"
       left="0"
       top="0"
@@ -30,17 +29,18 @@ export function Sidebar({ rates }: SidebarProps) {
       flexDirection="column"
     >
       <Link href="/dashboard">
-        <Box px="3" mb="8">
+        <Box px="5" mb="7">
           <Image
             src="/platita-logo.svg"
             alt="Platita"
-            h="36px"
+            h="30px"
             _dark={{ filter: "invert(1) hue-rotate(180deg)" }}
           />
         </Box>
       </Link>
 
-      <VStack gap="1" align="stretch">
+      {/* The marker sits flush to the rail edge — an index, not a row of buttons. */}
+      <Flex direction="column">
         {navItems.map((item) => {
           const isActive =
             item.href === "/dashboard"
@@ -52,35 +52,86 @@ export function Sidebar({ rates }: SidebarProps) {
               <Flex
                 align="center"
                 gap="3"
-                px="3"
+                pl="5"
+                pr="4"
                 py="2.5"
-                borderRadius="lg"
-                bg={isActive ? "bg.hover" : "transparent"}
+                position="relative"
                 color={isActive ? "fg.heading" : "fg.body"}
-                _hover={{ bg: "bg.hover", color: "fg.heading" }}
-                transition="all 0.15s"
+                _hover={{ color: "fg.heading", bg: "bg.sunk" }}
+                transition="color 0.14s, background 0.14s"
                 cursor="pointer"
               >
-                {item.icon}
-                <Text fontSize="sm" fontWeight={isActive ? "semibold" : "normal"}>
+                <Box
+                  position="absolute"
+                  left="0"
+                  top="0"
+                  bottom="0"
+                  w="3px"
+                  bg={isActive ? "cur.ars" : "transparent"}
+                />
+                <Box color={isActive ? "cur.ars" : "fg.muted"} display="inline-flex">
+                  {item.icon}
+                </Box>
+                <Text
+                  fontSize="sm"
+                  fontWeight={isActive ? "semibold" : "normal"}
+                  letterSpacing={isActive ? "-0.005em" : undefined}
+                >
                   {item.label}
                 </Text>
               </Flex>
             </Link>
           );
         })}
-      </VStack>
+      </Flex>
 
       {rates && rates.length > 0 && (
         <Box mt="auto" px="3" pt="4" borderTop="1px solid" borderColor="border.card">
-          <Text fontSize="xs" fontWeight="semibold" color="fg.muted" mb="2">
+          <Text
+            px="2"
+            fontSize="2xs"
+            fontWeight="semibold"
+            letterSpacing="0.13em"
+            textTransform="uppercase"
+            color="fg.muted"
+            mb="2"
+          >
             Cotizaciones
           </Text>
-          <VStack gap="1.5" align="stretch">
+          <VStack gap="0" align="stretch">
             {rates.map((rate) => (
-              <Flex key={rate.label} justify="space-between" align="center">
-                <Text fontSize="xs" color="fg.muted">{rate.label}</Text>
-                <Text fontSize="xs" fontWeight="semibold" color="fg.heading">{rate.value}</Text>
+              <Flex
+                key={rate.label}
+                justify="space-between"
+                align="center"
+                gap="2"
+                px="2"
+                py="1"
+                borderRadius="sm"
+                _hover={{ bg: "bg.sunk" }}
+              >
+                <Flex align="center" gap="2" minW="0">
+                  <Box
+                    w="3px"
+                    h="12px"
+                    borderRadius="1px"
+                    bg={rate.token ?? "fg.muted"}
+                    flexShrink={0}
+                  />
+                  <Text fontSize="xs" color="fg.body" truncate>
+                    {rate.label}
+                  </Text>
+                </Flex>
+                <Text
+                  fontFamily="mono"
+                  fontSize="xs"
+                  fontWeight="medium"
+                  color="fg.heading"
+                  whiteSpace="nowrap"
+                  data-num
+                >
+                  {rate.value}
+                </Text>
               </Flex>
             ))}
           </VStack>

@@ -50,8 +50,13 @@ export function formatDateShort(date: string | Date): string {
 }
 
 export function formatPercentage(value: number): string {
-  const sign = value >= 0 ? "+" : "";
-  return `${sign}${value.toFixed(2)}%`;
+  const sign = value >= 0 ? "+" : "−";
+  // Comma decimal and a space before the sign, to match every other figure.
+  const n = Math.abs(value).toLocaleString("es-AR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${sign}${n} %`;
 }
 
 export function formatMonthYear(date: string | Date): string {
@@ -63,6 +68,18 @@ export function formatMonthYear(date: string | Date): string {
   }
   const label = d.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
   return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+/**
+ * Time of day as `05:57 p.m.`. Built by hand rather than via toLocaleTimeString,
+ * whose es-AR output inserts a narrow no-break space inside "p. m.".
+ */
+export function formatTimeOfDay(date: Date): string {
+  const hours = date.getHours();
+  const suffix = hours < 12 ? "a.m." : "p.m.";
+  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  return `${String(hour12).padStart(2, "0")}:${mm} ${suffix}`;
 }
 
 export function parseArgentineNumber(value: string): number {

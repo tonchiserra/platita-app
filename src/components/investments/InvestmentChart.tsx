@@ -1,7 +1,6 @@
 "use client";
 
-import { Box, Flex, Grid, Text } from "@chakra-ui/react";
-import { useTheme } from "next-themes";
+import { Box, Grid, Text } from "@chakra-ui/react";
 import {
   ResponsiveContainer,
   BarChart,
@@ -13,6 +12,7 @@ import {
   Legend,
 } from "recharts";
 import { useMoneyVisibility } from "@/lib/context/money-visibility";
+import { CHART, CURRENCY_COLOR } from "@/lib/constants/colors";
 
 interface AssetData {
   asset: string;
@@ -63,12 +63,10 @@ export function InvestmentChart({
   assetSummary,
   assetsWithoutPrice = [],
 }: InvestmentChartProps) {
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
   const { mask } = useMoneyVisibility();
 
-  const gridColor = isDark ? "#1e293b" : "#e5e7eb";
-  const axisColor = isDark ? "#64748b" : "#9ca3af";
+  const gridColor = CHART.grid;
+  const axisColor = CHART.axis;
 
   const totalInvested = data.reduce((sum, d) => sum + d.invested, 0);
   const totalCurrent = data.reduce(
@@ -106,8 +104,8 @@ export function InvestmentChart({
       borderColor="border.card"
       p="6"
     >
-      <Text fontSize="lg" fontWeight="semibold" color="fg.heading" mb="4">
-        Resumen de Inversiones
+      <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.heading" mb="4">
+        Resumen de inversiones
       </Text>
 
       <Box mb="5" overflowX="auto">
@@ -143,23 +141,25 @@ export function InvestmentChart({
                 <Text fontSize="sm" color="fg.muted">
                   {s.asset}
                 </Text>
-                <Text fontSize="sm" color="fg.body">
+                <Text fontSize="sm" color="fg.body" fontFamily="mono" data-num>
                   {mask(fmt(s.invested))}
                 </Text>
-                <Text fontSize="sm" color="fg.body">
+                <Text fontSize="sm" color="fg.body" fontFamily="mono" data-num>
                   {s.currentValue !== null ? mask(fmt(s.currentValue)) : "—"}
                 </Text>
-                <Text fontSize="sm" color="fg.body">
+                <Text fontSize="sm" color="fg.body" fontFamily="mono" data-num>
                   {s.avgPrice !== null ? mask(fmt(s.avgPrice)) : "—"}
                 </Text>
                 <Text
                   fontSize="sm"
+                  fontFamily="mono"
+                  data-num
                   color={
                     assetDiff === null
                       ? "fg.body"
                       : assetDiff >= 0
-                        ? "green.400"
-                        : "red.400"
+                        ? "trend.up"
+                        : "trend.down"
                   }
                 >
                   {assetDiff !== null && assetDiffPct !== null
@@ -175,10 +175,10 @@ export function InvestmentChart({
           <Text fontSize="sm" fontWeight="bold" color="fg.heading">
             Total
           </Text>
-          <Text fontSize="sm" fontWeight="bold" color="fg.heading">
+          <Text fontSize="sm" fontWeight="bold" color="fg.heading" fontFamily="mono" data-num>
             {mask(fmt(totalInvested))}
           </Text>
-          <Text fontSize="sm" fontWeight="bold" color="fg.heading">
+          <Text fontSize="sm" fontWeight="bold" color="fg.heading" fontFamily="mono" data-num>
             {hasCurrentValues ? mask(fmt(totalCurrent)) : "—"}
           </Text>
           <Text fontSize="sm" fontWeight="bold" color="fg.heading">
@@ -187,12 +187,14 @@ export function InvestmentChart({
           <Text
             fontSize="sm"
             fontWeight="bold"
+            fontFamily="mono"
+            data-num
             color={
               diff === null
                 ? "fg.heading"
                 : diff >= 0
-                  ? "green.400"
-                  : "red.400"
+                  ? "trend.up"
+                  : "trend.down"
             }
           >
             {diff !== null && diffPct !== null
@@ -236,8 +238,8 @@ export function InvestmentChart({
             />
             <Tooltip content={<CustomTooltip mask={mask} />} />
             <Legend />
-            <Bar dataKey="Invertido" fill="#6397ce" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="Valor actual" fill="#34d399" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Invertido" fill={CURRENCY_COLOR.ARS} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Valor actual" fill={CHART.up} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       )}

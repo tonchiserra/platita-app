@@ -53,8 +53,8 @@ export function IncomeForm({ platforms }: IncomeFormProps) {
   return (
     <Box bg="bg.card" borderRadius="xl" border="1px solid" borderColor="border.card" p="6">
     <form onSubmit={handleSubmit}>
-      <Text fontSize="lg" fontWeight="semibold" color="fg.heading" mb="4">
-        Nuevo Ingreso
+      <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.heading" mb="4">
+        Nuevo ingreso
       </Text>
 
       <VStack gap="4" align="stretch">
@@ -139,7 +139,7 @@ export function IncomeForm({ platforms }: IncomeFormProps) {
         </Box>
 
         {error && (
-          <Text fontSize="sm" color="red.400">
+          <Text fontSize="sm" color="trend.down">
             {error}
           </Text>
         )}

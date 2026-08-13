@@ -23,21 +23,22 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const sidebarRates: { label: string; value: string }[] = [];
+  // Each rate carries its currency's colour token — see `cur.*` in the theme.
+  const sidebarRates: { label: string; value: string; token?: string }[] = [];
   if (dolarBlue) {
-    sidebarRates.push({ label: "USD Blue", value: formatCurrency(dolarBlue.venta) });
+    sidebarRates.push({ label: "Blue", value: formatCurrency(dolarBlue.venta), token: "cur.usd" });
   }
   if (cryptoPrices?.bitcoin) {
-    sidebarRates.push({ label: "BTC", value: formatCurrency(cryptoPrices.bitcoin.usd, "USD") });
+    sidebarRates.push({ label: "BTC", value: formatCurrency(cryptoPrices.bitcoin.usd, "USD"), token: "cur.btc" });
   }
   if (cryptoPrices?.ethereum) {
-    sidebarRates.push({ label: "ETH", value: formatCurrency(cryptoPrices.ethereum.usd, "USD") });
+    sidebarRates.push({ label: "ETH", value: formatCurrency(cryptoPrices.ethereum.usd, "USD"), token: "cur.eth" });
   }
 
   return (
     <Flex minH="100vh" bg="bg.page">
       <Sidebar rates={sidebarRates} />
-      <Box ml={{ base: "0", md: "240px" }} flex="1">
+      <Box ml={{ base: "0", md: "248px" }} flex="1" minW="0">
         <TopBar userEmail={user.email} />
         <Box as="main" p={{ base: "4", md: "6" }} pb={{ base: "24", md: "6" }}>
           {children}

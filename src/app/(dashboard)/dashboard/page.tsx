@@ -1,12 +1,19 @@
 import dynamic from "next/dynamic";
 import { VStack, SimpleGrid } from "@chakra-ui/react";
 import { createClient, getUser } from "@/lib/supabase/server";
-import { SummaryCards } from "@/components/dashboard/SummaryCards";
-import { ExchangeRates } from "@/components/dashboard/ExchangeRates";
+import { PatrimonyHero } from "@/components/dashboard/PatrimonyHero";
+import type { EquationTerm } from "@/components/dashboard/PatrimonyEquation";
+import { MonthFlow } from "@/components/dashboard/MonthFlow";
+import { ExchangeRates, type Rate } from "@/components/dashboard/ExchangeRates";
 import { LazySection } from "@/components/shared/LazySection";
-import { getDolarBlue, getEuroBlue } from "@/lib/api/exchange-rates";
+import { getDolarBlue, getEuroBlue, getDolarBlueHistory } from "@/lib/api/exchange-rates";
+import { buildAlerts, seriesChangePct } from "@/lib/utils/alerts";
+import { resolveCategories, iconMap, fixedCategoryNames } from "@/lib/utils/expense-categories";
+import { AlertsPanel } from "@/components/dashboard/AlertsPanel";
 import { getCryptoPrices } from "@/lib/api/crypto-prices";
-import { formatCurrency } from "@/lib/utils/format";
+import { convertToArs } from "@/lib/utils/currency-conversion";
+import { formatCurrency, formatTimeOfDay } from "@/lib/utils/format";
+import type { ExchangeRates as Rates } from "@/types/database";
 
 const ExpenseCategoryChart = dynamic(() =>
   import("@/components/expenses/ExpenseCategoryChart").then((m) => m.ExpenseCategoryChart)
@@ -19,6 +26,9 @@ const IncomeSourceChart = dynamic(() =>
 );
 const IncomeTrendChart = dynamic(() =>
   import("@/components/income/IncomeTrendChart").then((m) => m.IncomeTrendChart)
+);
+const CashflowChart = dynamic(() =>
+  import("@/components/dashboard/CashflowChart").then((m) => m.CashflowChart)
 );
 const PatrimonyChart = dynamic(() =>
   import("@/components/dashboard/PatrimonyChart").then((m) => m.PatrimonyChart)
@@ -59,6 +69,8 @@ export default async function DashboardPage() {
     { data: recentExpenses },
     { data: recentIncomes },
     { data: platforms },
+    blueHistory,
+    { data: categoryRows },
   ] = await Promise.all([
     supabase
       .from("patrimony_snapshots")
@@ -91,7 +103,17 @@ export default async function DashboardPage() {
       .from("platforms")
       .select("id, name")
       .eq("user_id", user!.id),
+    getDolarBlueHistory(8),
+    supabase
+      .from("expense_categories")
+      .select("*")
+      .eq("user_id", user!.id)
+      .order("sort_order"),
   ]);
+
+  // Falls back to the built-in list when the user hasn't customised one.
+  const categories = resolveCategories(categoryRows);
+  const categoryIcons = iconMap(categories);
 
   const allExpenses = recentExpenses ?? [];
   const allIncomes = recentIncomes ?? [];
@@ -102,19 +124,10 @@ export default async function DashboardPage() {
   const btcUsd = cryptoPrices?.bitcoin?.usd ?? 0;
   const ethUsd = cryptoPrices?.ethereum?.usd ?? 0;
 
-  function convertToArs(amount: number, currency: string): number {
-    switch (currency) {
-      case "ARS": return amount;
-      case "USD": return amount * usdRate;
-      case "EUR": return amount * eurRate;
-      case "BTC": return amount * btcUsd * usdRate;
-      case "ETH": return amount * ethUsd * usdRate;
-      default: return amount;
-    }
-  }
+  const fx: Rates = { usdRate, eurRate, btcUsd, ethUsd };
 
   const toArs = (row: { amount: number; currency: string }) =>
-    convertToArs(Number(row.amount), row.currency);
+    convertToArs(Number(row.amount), row.currency, fx);
 
   // Current + previous month filtering
   const curExpenses = allExpenses.filter((e) => buildMonthKey(e.date) === curMonth);
@@ -153,13 +166,17 @@ export default async function DashboardPage() {
   let estimatedArs: number | null = null;
   if (latestItems.length > 0) {
     estimatedArs = latestItems.reduce((sum, item) => {
-      return sum + convertToArs(Number((item as any).amount), (item as any).currency);
+      return sum + convertToArs(Number((item as any).amount), (item as any).currency, fx);
     }, 0);
     estimatedArs += totalIncomes - totalExpenses;
   }
 
-  // Estimated equation
-  let estimatedEquation: string | null = null;
+  // === The equation behind the estimate ===
+  // Each holding is shown with the conversion chain that turns it into pesos,
+  // because that chain is the calculation the user already does in their head.
+  const monthName = now.toLocaleDateString("es-AR", { month: "long" });
+  const equationTerms: EquationTerm[] = [];
+
   if (latestItems.length > 0) {
     const byCurrency: Record<string, number> = {};
     for (const item of latestItems) {
@@ -168,15 +185,37 @@ export default async function DashboardPage() {
     }
     const fmt = (n: number, maxDecimals = 2) =>
       n.toLocaleString("es-AR", { maximumFractionDigits: maxDecimals });
-    const parts: string[] = [];
-    if (byCurrency.ARS) parts.push(`${fmt(byCurrency.ARS)} ARS`);
-    if (byCurrency.USD) parts.push(`(${fmt(byCurrency.USD)} USD × ${fmt(usdRate)} ARS)`);
-    if (byCurrency.EUR) parts.push(`(${fmt(byCurrency.EUR)} EUR × ${fmt(eurRate)} ARS)`);
-    if (byCurrency.BTC) parts.push(`(${fmt(byCurrency.BTC, 8)} BTC × ${fmt(btcUsd)} USD × ${fmt(usdRate)} ARS)`);
-    if (byCurrency.ETH) parts.push(`(${fmt(byCurrency.ETH, 8)} ETH × ${fmt(ethUsd)} USD × ${fmt(usdRate)} ARS)`);
-    estimatedEquation = parts.join(" + ");
-    if (totalIncomes > 0) estimatedEquation += ` + ${fmt(totalIncomes)} ingresos`;
-    if (totalExpenses > 0) estimatedEquation += ` − ${fmt(totalExpenses)} gastos`;
+
+    const add = (term: Omit<EquationTerm, "op">) => {
+      equationTerms.push({ ...term, op: equationTerms.length > 0 ? "+" : undefined });
+    };
+
+    if (byCurrency.ARS) add({ amount: fmt(byCurrency.ARS, 0), unit: "ARS" });
+    if (byCurrency.USD)
+      add({ amount: fmt(byCurrency.USD), unit: "USD", chain: [{ value: fmt(usdRate) }] });
+    if (byCurrency.EUR)
+      add({ amount: fmt(byCurrency.EUR), unit: "EUR", chain: [{ value: fmt(eurRate) }] });
+    if (byCurrency.BTC)
+      add({
+        amount: fmt(byCurrency.BTC, 8),
+        unit: "BTC",
+        chain: [{ value: fmt(btcUsd, 0), unit: "USD" }, { value: fmt(usdRate) }],
+      });
+    if (byCurrency.ETH)
+      add({
+        amount: fmt(byCurrency.ETH, 8),
+        unit: "ETH",
+        chain: [{ value: fmt(ethUsd, 0), unit: "USD" }, { value: fmt(usdRate) }],
+      });
+
+    if (totalIncomes > 0)
+      add({ amount: fmt(totalIncomes, 0), note: `ingresos de ${monthName}` });
+    if (totalExpenses > 0)
+      equationTerms.push({
+        op: "−",
+        amount: fmt(totalExpenses, 0),
+        note: `gastos de ${monthName}`,
+      });
   }
 
   // === Expense category breakdown (current month) ===
@@ -236,12 +275,72 @@ export default async function DashboardPage() {
     return { month: formatMonthLabel(key), total, change };
   });
 
+  // === Alerts: comparisons the user would otherwise make by hand ===
+  // Each category's totals for the months *before* this one, so "above average"
+  // means above its own norm rather than above other categories.
+  const historyByCategory = new Map<string, number[]>();
+  {
+    const perMonth = new Map<string, Map<string, number>>();
+    for (const e of allExpenses) {
+      const key = buildMonthKey(e.date);
+      if (key === curMonth) continue;
+      if (!perMonth.has(key)) perMonth.set(key, new Map());
+      const m = perMonth.get(key)!;
+      m.set(e.category, (m.get(e.category) ?? 0) + toArs(e));
+    }
+    for (const monthTotals of perMonth.values()) {
+      for (const [category, amount] of monthTotals) {
+        if (!historyByCategory.has(category)) historyByCategory.set(category, []);
+        historyByCategory.get(category)!.push(amount);
+      }
+    }
+  }
+
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const daysSinceSnapshot = latest
+    ? Math.floor(
+        (now.getTime() - new Date(latest.date + "T00:00:00").getTime()) / 86_400_000
+      )
+    : null;
+
+  const usdHoldings = latestItems
+    .filter((item) => (item as any).currency === "USD")
+    .reduce((sum, item) => sum + Number((item as any).amount), 0);
+
+  const alerts = buildAlerts({
+    expensesByMonth: expMonthMap,
+    currentByCategory: categoryMap,
+    fixedCategories: fixedCategoryNames(categories),
+    historyByCategory,
+    currentMonthKey: curMonth,
+    prevMonthKey: prevMonth,
+    dayOfMonth: now.getDate(),
+    daysInMonth,
+    totalIncomes,
+    totalExpenses,
+    daysSinceSnapshot,
+    btcChange24h: cryptoPrices?.bitcoin?.usd_24h_change,
+    ethChange24h: cryptoPrices?.ethereum?.usd_24h_change,
+    blueWeekChangePct: blueHistory ? seriesChangePct(blueHistory) : undefined,
+    usdHoldingsArs: usdHoldings * usdRate,
+  });
+
+  // === Cashflow: the two series on one scale, so the gap reads as balance ===
+  const cashflowMonths = [
+    ...new Set([...expMonthMap.keys(), ...incMonthMap.keys()]),
+  ].sort();
+  const cashflowData = cashflowMonths.map((key) => ({
+    month: formatMonthLabel(key),
+    income: incMonthMap.get(key) ?? 0,
+    expenses: expMonthMap.get(key) ?? 0,
+  }));
+
   // === Patrimony breakdown by platform ===
   const platformMap = Object.fromEntries((platforms ?? []).map((p: any) => [p.id, p.name]));
   const platformTotals = new Map<string, number>();
   for (const item of latestItems) {
     const platformId = (item as any).platform_id as string;
-    const arsValue = convertToArs(Number((item as any).amount), (item as any).currency);
+    const arsValue = convertToArs(Number((item as any).amount), (item as any).currency, fx);
     platformTotals.set(platformId, (platformTotals.get(platformId) ?? 0) + arsValue);
   }
   const breakdownTotal = [...platformTotals.values()].reduce((s, v) => s + v, 0);
@@ -254,44 +353,84 @@ export default async function DashboardPage() {
     .sort((a, b) => b.valueArs - a.valueArs);
 
   // === Exchange rates display ===
-  const rates = [];
+  const rates: Rate[] = [];
   const timestamps: Date[] = [];
   if (dolarBlue) {
-    rates.push({ label: "USD Blue (venta)", value: formatCurrency(dolarBlue.venta) });
-    rates.push({ label: "USD Blue (compra)", value: formatCurrency(dolarBlue.compra) });
+    rates.push({
+      label: "Dólar blue",
+      token: "cur.usd",
+      compra: formatCurrency(dolarBlue.compra),
+      venta: formatCurrency(dolarBlue.venta),
+    });
     if (dolarBlue.fechaActualizacion) timestamps.push(new Date(dolarBlue.fechaActualizacion));
   }
+  if (euroBlue) {
+    rates.push({
+      label: "Euro",
+      token: "cur.eur",
+      compra: formatCurrency(euroBlue.compra),
+      venta: formatCurrency(euroBlue.venta),
+    });
+  }
   if (cryptoPrices?.bitcoin) {
-    rates.push({ label: "BTC", value: formatCurrency(cryptoPrices.bitcoin.usd, "USD") });
+    rates.push({
+      label: "Bitcoin",
+      token: "cur.btc",
+      value: formatCurrency(cryptoPrices.bitcoin.usd, "USD"),
+    });
     if (cryptoPrices.bitcoin.last_updated_at) timestamps.push(new Date(cryptoPrices.bitcoin.last_updated_at * 1000));
   }
   if (cryptoPrices?.ethereum) {
-    rates.push({ label: "ETH", value: formatCurrency(cryptoPrices.ethereum.usd, "USD") });
+    rates.push({
+      label: "Ethereum",
+      token: "cur.eth",
+      value: formatCurrency(cryptoPrices.ethereum.usd, "USD"),
+    });
     if (cryptoPrices.ethereum.last_updated_at) timestamps.push(new Date(cryptoPrices.ethereum.last_updated_at * 1000));
   }
   const oldestUpdate = timestamps.length > 0
     ? new Date(Math.min(...timestamps.map((t) => t.getTime())))
     : null;
-  const updatedAt = oldestUpdate
-    ? `Actualizado ${oldestUpdate.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })} ${oldestUpdate.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}`
-    : undefined;
+  const updatedAt = oldestUpdate ? formatTimeOfDay(oldestUpdate) : undefined;
+
+  // === Hero figures ===
+  const lastSnapshotArs = Number(latest?.total_ars ?? 0);
+  const estimatedChange =
+    estimatedArs !== null && lastSnapshotArs > 0
+      ? ((estimatedArs - lastSnapshotArs) / lastSnapshotArs) * 100
+      : undefined;
+  const heroValue = estimatedArs ?? lastSnapshotArs;
+  const heroTotal = heroValue.toLocaleString("es-AR", { maximumFractionDigits: 0 });
+  const today = now.toLocaleDateString("es-AR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 
   return (
-    <VStack gap="6" align="stretch">
-      <SummaryCards
-        lastSnapshotArs={Number(latest?.total_ars ?? 0)}
-        estimatedArs={estimatedArs}
-        estimatedEquation={estimatedEquation}
-        monthlyChange={monthlyChange}
-        totalExpensesMonth={totalExpenses}
-        totalIncomeMonth={totalIncomes}
-        expensesChange={expensesChange}
+    <VStack gap="4" align="stretch">
+      <PatrimonyHero
+        total={heroTotal}
+        change={estimatedArs !== null ? estimatedChange : monthlyChange}
+        changeLabel={
+          estimatedArs !== null ? "desde el último cierre" : "vs. cierre anterior"
+        }
+        terms={equationTerms}
+        today={today}
+        lastClose={lastSnapshotArs > 0 ? formatCurrency(lastSnapshotArs) : undefined}
+      />
+      <AlertsPanel alerts={alerts} />
+      <MonthFlow
+        income={totalIncomes}
+        expenses={totalExpenses}
         incomeChange={incomeChange}
+        expensesChange={expensesChange}
         balanceChange={balanceChange}
+        monthLabel={monthName}
       />
       <LazySection minHeight="300px">
         <SimpleGrid columns={{ base: 1, md: 2 }} gap="4">
-          <ExpenseCategoryChart data={categoryData} total={totalExpenses} change={expensesChange} />
+          <ExpenseCategoryChart data={categoryData} total={totalExpenses} change={expensesChange} icons={categoryIcons} />
           <IncomeSourceChart data={sourceData} total={totalIncomes} change={incomeChange} />
         </SimpleGrid>
       </LazySection>
@@ -300,6 +439,9 @@ export default async function DashboardPage() {
           <ExpenseTrendChart data={expTrendData} />
           <IncomeTrendChart data={incTrendData} />
         </SimpleGrid>
+      </LazySection>
+      <LazySection minHeight="340px">
+        <CashflowChart data={cashflowData} />
       </LazySection>
       <LazySection minHeight="300px">
         <PatrimonyChart data={sorted} />

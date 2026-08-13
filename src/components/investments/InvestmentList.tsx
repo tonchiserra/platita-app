@@ -99,17 +99,18 @@ export function InvestmentList({ investments }: InvestmentListProps) {
           </Flex>
 
           <Flex align="center" gap="4">
-            <Text fontSize="sm" fontWeight="semibold" color="fg.heading">
+            <Text fontSize="sm" fontWeight="semibold" color="fg.heading" fontFamily="mono" data-num>
               {mask(formatCurrency(Number(inv.total_amount), inv.currency as Currency))}
             </Text>
             <Button
               size="xs"
               variant="ghost"
               color="fg.muted"
-              _hover={{ color: "red.400" }}
+              _hover={{ color: "trend.down" }}
+              aria-label="Eliminar"
               onClick={() => setDeleteId(inv.id)}
             >
-              ✕
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
             </Button>
           </Flex>
         </Flex>

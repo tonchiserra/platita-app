@@ -11,10 +11,15 @@ export const Select = chakra("select", {
     borderColor: "border.input",
     borderRadius: "l2",
     color: "fg.heading",
-    fontSize: "md",
+    fontSize: "sm",
     outline: "none",
-    _focus: {
-      borderColor: "brand.500",
+    transition: "border-color 0.14s, box-shadow 0.14s",
+    _hover: {
+      borderColor: "border.strong",
+    },
+    _focusVisible: {
+      borderColor: "cur.ars",
+      boxShadow: "0 0 0 3px color-mix(in srgb, var(--chakra-colors-cur-ars) 22%, transparent)",
     },
   },
 });

@@ -5,9 +5,13 @@ import { Select } from "@/components/shared/Select";
 import { Box, Button, Flex, Input, Text, VStack } from "@chakra-ui/react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { EXPENSE_CATEGORIES, CATEGORY_ICONS } from "@/lib/constants/categories";
+import type { CategoryOption } from "@/lib/utils/expense-categories";
 
-export function ExpenseForm() {
+interface ExpenseFormProps {
+  categories: CategoryOption[];
+}
+
+export function ExpenseForm({ categories }: ExpenseFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -47,8 +51,8 @@ export function ExpenseForm() {
   return (
     <Box bg="bg.card" borderRadius="xl" border="1px solid" borderColor="border.card" p="6">
     <form onSubmit={handleSubmit}>
-      <Text fontSize="lg" fontWeight="semibold" color="fg.heading" mb="4">
-        Nuevo Gasto
+      <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.heading" mb="4">
+        Nuevo gasto
       </Text>
 
       <VStack gap="4" align="stretch">
@@ -90,9 +94,9 @@ export function ExpenseForm() {
             required
           >
             <option value="">Seleccionar...</option>
-            {EXPENSE_CATEGORIES.map((cat) => (
-              <option key={cat} value={cat}>
-                {CATEGORY_ICONS[cat]} {cat}
+            {categories.map((cat) => (
+              <option key={cat.name} value={cat.name}>
+                {cat.icon} {cat.name}
               </option>
             ))}
           </Select>
@@ -112,7 +116,7 @@ export function ExpenseForm() {
         </Box>
 
         {error && (
-          <Text fontSize="sm" color="red.400">
+          <Text fontSize="sm" color="trend.down">
             {error}
           </Text>
         )}

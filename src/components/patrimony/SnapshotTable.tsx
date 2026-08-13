@@ -240,11 +240,12 @@ function SnapshotCard({
               size="xs"
               variant="ghost"
               color="fg.muted"
-              _hover={{ color: "red.400" }}
+              _hover={{ color: "trend.down" }}
+              aria-label="Eliminar registro"
               onClick={onDelete}
               px="2"
             >
-              ✕
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
             </Button>
           </Flex>
         </Flex>
@@ -254,14 +255,14 @@ function SnapshotCard({
           </Text>
         )}
         <Flex align="center" gap="2" mt="1">
-          <Text fontWeight="bold" fontSize="lg" color="fg.heading">
+          <Text fontWeight="bold" fontSize="lg" color="fg.heading" fontFamily="mono" data-num>
             {mask(formatCurrency(Number(snapshot.total_ars)))}
           </Text>
           {totalChange !== undefined && (
             <Text
               fontSize="sm"
               fontWeight="medium"
-              color={totalChange >= 0 ? "green.400" : "red.400"}
+              color={totalChange >= 0 ? "trend.up" : "trend.down"}
             >
               {formatPercentage(totalChange)}
             </Text>

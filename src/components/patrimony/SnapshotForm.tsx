@@ -359,8 +359,8 @@ export function SnapshotForm({
     <Box bg="bg.card" borderRadius="xl" border="1px solid" borderColor="border.card" p="6">
     <form onSubmit={handleSubmit}>
       <Flex justify="space-between" align="center" mb="4">
-        <Text fontSize="lg" fontWeight="semibold" color="fg.heading">
-          {isEditing ? "Editar Snapshot" : "Nuevo Snapshot de Patrimonio"}
+        <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.heading">
+          {isEditing ? "Editar registro" : "Nuevo registro de patrimonio"}
         </Text>
         <Button
           size="sm"
@@ -513,7 +513,7 @@ export function SnapshotForm({
                       size="xs"
                       variant="ghost"
                       color="fg.muted"
-                      _hover={{ color: "red.400" }}
+                      _hover={{ color: "trend.down" }}
                       onClick={() => hidePlatform(platform.id)}
                       px="2"
                     >
@@ -553,11 +553,12 @@ export function SnapshotForm({
                             size="xs"
                             variant="ghost"
                             color="fg.muted"
-                            _hover={{ color: "red.400" }}
+                            _hover={{ color: "trend.down" }}
+                            aria-label="Quitar fila"
                             onClick={() => removeRow(platform.id, row.id)}
                             px="2"
                           >
-                            ✕
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
                           </Button>
                         )}
                       </Flex>
@@ -591,7 +592,7 @@ export function SnapshotForm({
         </Box>
 
         {error && (
-          <Text fontSize="sm" color="red.400">
+          <Text fontSize="sm" color="trend.down">
             {error}
           </Text>
         )}

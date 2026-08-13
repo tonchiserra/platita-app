@@ -20,6 +20,17 @@ export const EXPENSE_CATEGORIES = [
 
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
 
+/**
+ * Charges that land once a month and don't recur within it — rent, utilities,
+ * subscriptions. Projecting month-end spend by scaling the month-to-date total
+ * would multiply these as if they repeated daily, so they're held flat instead.
+ * Add a category here if its spend is monthly-fixed rather than day-to-day.
+ */
+export const FIXED_CATEGORIES: ReadonlySet<string> = new Set<ExpenseCategory>([
+  "Home",
+  "Subscriptions",
+]);
+
 export const CATEGORY_ICONS: Record<ExpenseCategory, string> = {
   Shopping: "🛍️",
   Entertainment: "🎬",

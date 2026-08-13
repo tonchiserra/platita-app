@@ -1,14 +1,9 @@
 "use client";
 
 import { Box, Flex, Text } from "@chakra-ui/react";
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
 import { formatCurrency } from "@/lib/utils/format";
 import { useMoneyVisibility } from "@/lib/context/money-visibility";
-
-const COLORS = [
-  "#3d77b8", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4",
-  "#8b5cf6", "#ec4899", "#14b8a6", "#f97316", "#64748b",
-];
+import { PLATFORM_COLORS, categoricalColor } from "@/lib/constants/colors";
 
 interface PlatformData {
   platform: string;
@@ -21,94 +16,90 @@ interface PatrimonyBreakdownChartProps {
   totalArs: number;
 }
 
-function CustomTooltip({ active, payload, mask }: any) {
-  if (!active || !payload?.length) return null;
-  const entry = payload[0].payload;
-  return (
-    <Box bg="bg.card" border="1px solid" borderColor="border.card" borderRadius="lg" p="3">
-      <Text fontSize="xs" fontWeight="semibold" color="fg.heading" mb="1">
-        {entry.platform}
-      </Text>
-      <Text fontSize="xs" color="fg.body">
-        {mask(formatCurrency(entry.valueArs))} ({entry.percentage.toFixed(1)}%)
-      </Text>
-    </Box>
-  );
-}
-
+/**
+ * A composition of one whole, so a single stacked bar reads it directly — the
+ * slices sit adjacent and the legend carries the actual figures, which a donut
+ * pushes into a tooltip.
+ */
 export function PatrimonyBreakdownChart({ data, totalArs }: PatrimonyBreakdownChartProps) {
   const { mask } = useMoneyVisibility();
 
-  if (data.length === 0) {
-    return (
-      <Box bg="bg.card" borderRadius="xl" border="1px solid" borderColor="border.card" p="6">
-        <Text fontSize="lg" fontWeight="semibold" color="fg.heading" mb="4">
-          Distribución del Patrimonio
+  return (
+    <Box bg="bg.card" borderRadius="xl" border="1px solid" borderColor="border.card" p="6">
+      <Flex align="baseline" justify="space-between" gap="3" wrap="wrap" mb="1">
+        <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.heading">
+          En qué está tu patrimonio
         </Text>
+        {data.length > 0 && (
+          <Text fontSize="xs" color="fg.muted">
+            {data.length} {data.length === 1 ? "plataforma" : "plataformas"}
+          </Text>
+        )}
+      </Flex>
+
+      {data.length === 0 ? (
         <Text color="fg.muted" textAlign="center" py="12">
           Sin datos de patrimonio
         </Text>
-      </Box>
-    );
-  }
-
-  return (
-    <Box bg="bg.card" borderRadius="xl" border="1px solid" borderColor="border.card" p="6">
-      <Text fontSize="lg" fontWeight="semibold" color="fg.heading" mb="1">
-        Distribución del Patrimonio
-      </Text>
-      <Text fontSize="xs" color="fg.muted" mb="4">
-        Basado en el último mes registrado
-      </Text>
-
-      <Box position="relative">
-        <ResponsiveContainer width="100%" height={220}>
-          <PieChart>
-            <Pie
-              data={data}
-              dataKey="valueArs"
-              nameKey="platform"
-              cx="50%"
-              cy="50%"
-              innerRadius={60}
-              outerRadius={90}
-              paddingAngle={2}
-              strokeWidth={0}
-            >
-              {data.map((_, i) => (
-                <Cell key={i} fill={COLORS[i % COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip content={<CustomTooltip mask={mask} />} />
-          </PieChart>
-        </ResponsiveContainer>
-        <Box
-          position="absolute"
-          top="50%"
-          left="50%"
-          transform="translate(-50%, -50%)"
-          textAlign="center"
-          pointerEvents="none"
-        >
-          <Text fontSize="sm" fontWeight="bold" color="fg.heading">
-            {mask(formatCurrency(totalArs))}
+      ) : (
+        <>
+          <Text fontSize="xs" color="fg.muted" mb="4" fontFamily="mono" data-num>
+            {mask(formatCurrency(totalArs))} · último mes registrado
           </Text>
-          <Text fontSize="2xs" color="fg.muted">
-            Total ARS
-          </Text>
-        </Box>
-      </Box>
 
-      <Flex flexWrap="wrap" gap="3" mt="2" justify="center">
-        {data.map((item, i) => (
-          <Flex key={item.platform} align="center" gap="1.5">
-            <Box w="2.5" h="2.5" borderRadius="sm" bg={COLORS[i % COLORS.length]} flexShrink={0} />
-            <Text fontSize="xs" color="fg.body">
-              {item.platform} ({item.percentage.toFixed(0)}%)
-            </Text>
+          <Flex h="9px" borderRadius="sm" overflow="hidden" gap="0.5" mb="4">
+            {data.map((item, i) => (
+              <Box
+                key={item.platform}
+                bg={categoricalColor(PLATFORM_COLORS, i)}
+                w={`${item.percentage}%`}
+                minW="2px"
+              />
+            ))}
           </Flex>
-        ))}
-      </Flex>
+
+          <Flex direction="column">
+            {data.map((item, i) => (
+              <Box
+                key={item.platform}
+                display="grid"
+                gridTemplateColumns="auto minmax(0, 1fr) auto auto"
+                alignItems="baseline"
+                gap="3"
+                py="2"
+                borderBottom="1px solid"
+                borderColor="border.card"
+                _last={{ borderBottom: "none" }}
+              >
+                <Box
+                  w="3px"
+                  h="12px"
+                  borderRadius="1px"
+                  bg={categoricalColor(PLATFORM_COLORS, i)}
+                  flexShrink={0}
+                  alignSelf="center"
+                />
+                <Text fontSize="sm" color="fg.heading" truncate>
+                  {item.platform}
+                </Text>
+                <Text fontFamily="mono" fontSize="xs" color="fg.muted" textAlign="right" data-num>
+                  {item.percentage.toFixed(1).replace(".", ",")} %
+                </Text>
+                <Text
+                  fontFamily="mono"
+                  fontSize="sm"
+                  color="fg.heading"
+                  textAlign="right"
+                  whiteSpace="nowrap"
+                  data-num
+                >
+                  {mask(formatCurrency(item.valueArs))}
+                </Text>
+              </Box>
+            ))}
+          </Flex>
+        </>
+      )}
     </Box>
   );
 }

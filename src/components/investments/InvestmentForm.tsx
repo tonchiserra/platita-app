@@ -59,8 +59,8 @@ export function InvestmentForm({ platforms }: InvestmentFormProps) {
   return (
     <Box bg="bg.card" borderRadius="xl" border="1px solid" borderColor="border.card" p="6">
     <form onSubmit={handleSubmit}>
-      <Text fontSize="lg" fontWeight="semibold" color="fg.heading" mb="4">
-        Nueva Inversión
+      <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.heading" mb="4">
+        Nueva inversión
       </Text>
 
       <VStack gap="4" align="stretch">
@@ -179,7 +179,7 @@ export function InvestmentForm({ platforms }: InvestmentFormProps) {
         </Flex>
 
         {error && (
-          <Text fontSize="sm" color="red.400">
+          <Text fontSize="sm" color="trend.down">
             {error}
           </Text>
         )}

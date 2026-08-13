@@ -5,8 +5,6 @@ import { Box, Collapsible, Flex, Text, Button } from "@chakra-ui/react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { formatCurrency, formatDate, formatPercentage } from "@/lib/utils/format";
-import { CATEGORY_ICONS } from "@/lib/constants/categories";
-import type { ExpenseCategory } from "@/lib/constants/categories";
 import type { ExpenseWithPlatform } from "@/types/database";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { useMoneyVisibility } from "@/lib/context/money-visibility";
@@ -51,9 +49,11 @@ function groupByMonth(expenses: ExpenseWithPlatform[]): MonthGroup[] {
 
 interface ExpenseListProps {
   expenses: ExpenseWithPlatform[];
+  /** Category name → glyph, resolved from the user's own list. */
+  icons?: Record<string, string>;
 }
 
-export function ExpenseList({ expenses }: ExpenseListProps) {
+export function ExpenseList({ expenses, icons }: ExpenseListProps) {
   const router = useRouter();
   const { mask } = useMoneyVisibility();
   const groups = useMemo(() => groupByMonth(expenses), [expenses]);
@@ -111,12 +111,12 @@ export function ExpenseList({ expenses }: ExpenseListProps) {
                   {group.change !== undefined && (
                     <Text
                       fontSize="xs"
-                      color={group.change >= 0 ? "red.400" : "green.400"}
+                      color={group.change >= 0 ? "trend.down" : "trend.up"}
                     >
                       {formatPercentage(group.change)}
                     </Text>
                   )}
-                  <Text fontSize="sm" fontWeight="semibold" color="red.400">
+                  <Text fontSize="sm" fontWeight="semibold" color="trend.down" fontFamily="mono" data-num>
                     -{mask(formatCurrency(group.total))}
                   </Text>
                 </Flex>
@@ -137,7 +137,7 @@ export function ExpenseList({ expenses }: ExpenseListProps) {
                 >
                   <Flex align="center" gap="3" flex="1">
                     <Text fontSize="xl">
-                      {CATEGORY_ICONS[expense.category as ExpenseCategory] ?? "📌"}
+                      {icons?.[expense.category] ?? "📌"}
                     </Text>
                     <Box>
                       <Text fontSize="sm" fontWeight="medium" color="fg.heading">
@@ -157,17 +157,18 @@ export function ExpenseList({ expenses }: ExpenseListProps) {
                   </Flex>
 
                   <Flex align="center" gap="4">
-                    <Text fontSize="sm" fontWeight="semibold" color="red.400">
+                    <Text fontSize="sm" fontWeight="semibold" color="trend.down" fontFamily="mono" data-num>
                       -{mask(formatCurrency(Number(expense.amount), expense.currency as any))}
                     </Text>
                     <Button
                       size="xs"
                       variant="ghost"
                       color="fg.muted"
-                      _hover={{ color: "red.400" }}
+                      _hover={{ color: "trend.down" }}
+                      aria-label="Eliminar"
                       onClick={() => setDeleteId(expense.id)}
                     >
-                      ✕
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
                     </Button>
                   </Flex>
                 </Flex>

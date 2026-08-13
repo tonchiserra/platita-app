@@ -66,7 +66,7 @@ export function PlatformManager({ platforms }: PlatformManagerProps) {
   return (
     <VStack gap="4" align="stretch">
       <Flex justify="space-between" align="center">
-        <Text fontSize="lg" fontWeight="semibold" color="fg.heading">
+        <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.heading">
           Plataformas
         </Text>
         {!showForm && (
@@ -128,7 +128,7 @@ export function PlatformManager({ platforms }: PlatformManagerProps) {
             </Flex>
 
             {error && (
-              <Text fontSize="xs" color="red.400">{error}</Text>
+              <Text fontSize="xs" color="trend.down">{error}</Text>
             )}
 
             <Flex gap="2" justifyContent="flex-end">
@@ -202,10 +202,11 @@ export function PlatformManager({ platforms }: PlatformManagerProps) {
                   size="xs"
                   variant="ghost"
                   color="fg.muted"
-                  _hover={{ color: "red.400" }}
+                  _hover={{ color: "trend.down" }}
+                  aria-label="Eliminar plataforma"
                   onClick={() => handleDelete(platform.id)}
                 >
-                  ✕
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
                 </Button>
               </Flex>
             </Flex>

@@ -33,9 +33,15 @@ export function ConfirmDialog({
     <DialogRoot open={open} onOpenChange={(e) => !e.open && onClose()} placement="center">
       <DialogBackdrop />
       <DialogPositioner>
-        <DialogContent bg="bg.card" border="1px solid" borderColor="border.card" mx="4">
+        <DialogContent
+          bg="bg.card"
+          border="1px solid"
+          borderColor="border.card"
+          borderRadius="xl"
+          mx="4"
+        >
           <DialogHeader>
-            <Text fontSize="lg" fontWeight="semibold" color="fg.heading">
+            <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.heading">
               {title}
             </Text>
           </DialogHeader>
@@ -52,9 +58,10 @@ export function ConfirmDialog({
             </DialogActionTrigger>
             <Button
               size="sm"
-              bg="red.500"
+              bg="trend.down"
               color="white"
-              _hover={{ bg: "red.600" }}
+              borderRadius="l2"
+              _hover={{ filter: "brightness(0.9)" }}
               onClick={() => {
                 onConfirm();
                 onClose();

@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from "react";
 import { Box, Button, Flex, Text } from "@chakra-ui/react";
-import { useTheme } from "next-themes";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -14,6 +13,7 @@ import {
 } from "recharts";
 import { formatCurrency, formatDateShort, formatPercentage } from "@/lib/utils/format";
 import { useMoneyVisibility } from "@/lib/context/money-visibility";
+import { CHART, CURRENCY_COLOR } from "@/lib/constants/colors";
 
 interface ChartDataPoint {
   date: string;
@@ -41,7 +41,7 @@ function CustomTooltip({ active, payload, label, mask }: any) {
       <Text fontSize="xs" color="fg.body" mb="1">
         {label}
       </Text>
-      <Text fontSize="sm" fontWeight="bold" color="fg.heading">
+      <Text fontSize="sm" fontWeight="bold" color="fg.heading" fontFamily="mono" data-num>
         {mask(formatCurrency(payload[0].value))}
       </Text>
     </Box>
@@ -49,13 +49,11 @@ function CustomTooltip({ active, payload, label, mask }: any) {
 }
 
 export function PatrimonyChart({ data }: PatrimonyChartProps) {
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
   const [selectedRange, setSelectedRange] = useState("1A");
   const { mask } = useMoneyVisibility();
 
-  const gridColor = isDark ? "#1e293b" : "#e5e7eb";
-  const axisColor = isDark ? "#64748b" : "#9ca3af";
+  const gridColor = CHART.grid;
+  const axisColor = CHART.axis;
 
   const filteredData = useMemo(() => {
     const range = TIME_RANGES.find((r) => r.label === selectedRange);
@@ -92,14 +90,14 @@ export function PatrimonyChart({ data }: PatrimonyChartProps) {
     >
       <Flex justify="space-between" align="center" mb="4" flexWrap="wrap" gap="2">
         <Flex align="center" gap="2">
-          <Text fontSize="lg" fontWeight="semibold" color="fg.heading">
-            Crecimiento del Patrimonio
+          <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.heading">
+            Crecimiento del patrimonio
           </Text>
           {rangeChange !== undefined && (
             <Text
               fontSize="sm"
               fontWeight="semibold"
-              color={rangeChange >= 0 ? "green.400" : "red.400"}
+              color={rangeChange >= 0 ? "trend.up" : "trend.down"}
             >
               {formatPercentage(rangeChange)}
             </Text>
@@ -137,8 +135,8 @@ export function PatrimonyChart({ data }: PatrimonyChartProps) {
           <AreaChart data={chartData}>
             <defs>
               <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#3d77b8" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#3d77b8" stopOpacity={0} />
+                <stop offset="5%" stopColor={CURRENCY_COLOR.ARS} stopOpacity={0.3} />
+                <stop offset="95%" stopColor={CURRENCY_COLOR.ARS} stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
@@ -168,7 +166,7 @@ export function PatrimonyChart({ data }: PatrimonyChartProps) {
             <Area
               type="monotone"
               dataKey="total_ars"
-              stroke="#3d77b8"
+              stroke={CURRENCY_COLOR.ARS}
               strokeWidth={2}
               fill="url(#colorTotal)"
             />

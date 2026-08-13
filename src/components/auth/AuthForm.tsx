@@ -97,13 +97,13 @@ export function AuthForm({ mode }: AuthFormProps) {
         </Box>
 
         {error && (
-          <Text fontSize="sm" color="red.400">
+          <Text fontSize="sm" color="trend.down">
             {error}
           </Text>
         )}
 
         {success && (
-          <Text fontSize="sm" color="green.400">
+          <Text fontSize="sm" color="trend.up">
             {success}
           </Text>
         )}

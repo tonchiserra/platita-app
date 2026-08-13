@@ -8,6 +8,17 @@ export interface Platform {
   created_at: string;
 }
 
+export interface ExpenseCategoryRow {
+  id: string;
+  user_id: string;
+  name: string;
+  icon: string;
+  /** Monthly-fixed charge — excluded from the month-end spending projection. */
+  is_fixed: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
 export interface Expense {
   id: string;
   user_id: string;

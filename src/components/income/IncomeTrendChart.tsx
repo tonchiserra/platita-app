@@ -1,7 +1,6 @@
 "use client";
 
 import { Box, Text } from "@chakra-ui/react";
-import { useTheme } from "next-themes";
 import {
   ResponsiveContainer,
   BarChart,
@@ -13,6 +12,7 @@ import {
 } from "recharts";
 import { formatCurrency, formatPercentage } from "@/lib/utils/format";
 import { useMoneyVisibility } from "@/lib/context/money-visibility";
+import { CHART } from "@/lib/constants/colors";
 
 interface TrendData {
   month: string;
@@ -32,11 +32,11 @@ function CustomTooltip({ active, payload, label, mask }: any) {
       <Text fontSize="xs" fontWeight="semibold" color="fg.heading" mb="1">
         {label}
       </Text>
-      <Text fontSize="xs" color="fg.body">
+      <Text fontSize="xs" color="fg.body" fontFamily="mono" data-num>
         {mask(formatCurrency(entry.total))}
       </Text>
       {entry.change !== undefined && (
-        <Text fontSize="xs" color={entry.change >= 0 ? "green.400" : "red.400"}>
+        <Text fontSize="xs" color={entry.change >= 0 ? "trend.up" : "trend.down"}>
           {formatPercentage(entry.change)} vs. mes anterior
         </Text>
       )}
@@ -45,18 +45,25 @@ function CustomTooltip({ active, payload, label, mask }: any) {
 }
 
 export function IncomeTrendChart({ data }: IncomeTrendChartProps) {
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
   const { mask } = useMoneyVisibility();
 
-  const gridColor = isDark ? "#1e293b" : "#e5e7eb";
-  const axisColor = isDark ? "#64748b" : "#9ca3af";
+  const gridColor = CHART.grid;
+  const axisColor = CHART.axis;
 
   if (data.length === 0) {
     return (
-      <Box bg="bg.card" borderRadius="xl" border="1px solid" borderColor="border.card" p="6">
-        <Text fontSize="lg" fontWeight="semibold" color="fg.heading" mb="4">
-          Tendencia de Ingresos
+      <Box
+      bg="bg.card"
+      borderRadius="xl"
+      border="1px solid"
+      borderColor="border.card"
+      p="6"
+      h="full"
+      display="flex"
+      flexDirection="column"
+    >
+        <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.heading" mb="4">
+          Tendencia de ingresos
         </Text>
         <Text color="fg.muted" textAlign="center" py="12">
           Sin datos de ingresos
@@ -66,11 +73,21 @@ export function IncomeTrendChart({ data }: IncomeTrendChartProps) {
   }
 
   return (
-    <Box bg="bg.card" borderRadius="xl" border="1px solid" borderColor="border.card" p="6">
-      <Text fontSize="lg" fontWeight="semibold" color="fg.heading" mb="4">
-        Tendencia de Ingresos
+    <Box
+      bg="bg.card"
+      borderRadius="xl"
+      border="1px solid"
+      borderColor="border.card"
+      p="6"
+      h="full"
+      display="flex"
+      flexDirection="column"
+    >
+      <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.heading" mb="4">
+        Tendencia de ingresos
       </Text>
-      <ResponsiveContainer width="100%" height={220}>
+      <Box flex="1" minH="220px">
+        <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
           <XAxis
@@ -96,9 +113,10 @@ export function IncomeTrendChart({ data }: IncomeTrendChartProps) {
             }
           />
           <Tooltip content={<CustomTooltip mask={mask} />} />
-          <Bar dataKey="total" radius={[4, 4, 0, 0]} fill="#34d399" />
+          <Bar dataKey="total" radius={[4, 4, 0, 0]} fill={CHART.up} />
         </BarChart>
-      </ResponsiveContainer>
+        </ResponsiveContainer>
+      </Box>
     </Box>
   );
 }

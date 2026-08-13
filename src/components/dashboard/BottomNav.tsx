@@ -34,13 +34,25 @@ export function BottomNav() {
               <Flex
                 direction="column"
                 align="center"
-                gap="0.5"
-                py="2"
+                gap="1"
+                pt="2"
+                pb="1.5"
                 px="2"
+                position="relative"
                 color={isActive ? "fg.heading" : "fg.muted"}
-                transition="all 0.15s"
+                transition="color 0.15s"
                 cursor="pointer"
               >
+                <Box
+                  position="absolute"
+                  top="0"
+                  left="50%"
+                  transform="translateX(-50%)"
+                  w="18px"
+                  h="2px"
+                  borderRadius="0 0 2px 2px"
+                  bg={isActive ? "cur.ars" : "transparent"}
+                />
                 {item.icon}
                 <Text
                   fontSize="2xs"
