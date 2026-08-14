@@ -35,10 +35,23 @@ export interface DolarHistoryPoint {
   venta: number;
 }
 
+/** Blue sell rate on `date`, or the closest earlier quote (weekends, holidays). */
+export function blueRateOn(
+  series: DolarHistoryPoint[],
+  date: string
+): number | undefined {
+  let best: DolarHistoryPoint | undefined;
+  for (const point of series) {
+    if (point.fecha <= date && (!best || point.fecha > best.fecha)) best = point;
+  }
+  return best?.venta;
+}
+
 /**
- * Recent blue history, for spotting a sharp move. The upstream only serves the
- * whole series (~500 KB) with no date-scoped endpoint, so this runs server-side
- * on a long revalidate and returns just the tail.
+ * Recent blue history, for spotting a sharp move and for valuing past
+ * snapshots. The upstream only serves the whole series (~500 KB) with no
+ * date-scoped endpoint, so this runs server-side on a long revalidate and
+ * returns just the tail.
  */
 export async function getDolarBlueHistory(days = 10): Promise<DolarHistoryPoint[] | null> {
   try {

@@ -131,6 +131,16 @@ Cards are styled inline and repeatedly as `bg="bg.card" borderRadius="xl" border
 
 Use `Select` from `@/components/shared/Select` (a `chakra("select")` primitive), **not** Chakra v3's `Select` composite — the codebase uses plain native selects with `name` attributes so FormData picks them up.
 
+### Alerts
+
+`src/lib/utils/alerts.ts` holds the dashboard's "Para tener en cuenta" panel. `buildAlerts()` is a **pure function** — every input, including `today`, is passed in, so each rule is testable without mocking time or the network. Rules are small functions collected in `RULES`; add a rule by writing one and appending it there.
+
+Two design constraints worth keeping:
+- **Thresholds live in the `T` object** and are deliberately loose. An alert that fires every month is noise, so each rule must stay silent in an ordinary month.
+- **Never state something arithmetic guarantees.** With two categories one must exceed 40 %, so `dominantCategory` requires four; likewise `platformConcentration` requires three platforms. Guards like these are the difference between an alert and a truism.
+
+Rate history and inflation come from argentinadatos (`getDolarBlueHistory`, `getMonthlyInflation`); both are fetched server-side with long revalidates and return `null` on failure, so the rules that depend on them simply don't fire when the upstream is down.
+
 ### Charts
 
 `src/lib/constants/colors.ts` is the single source of chart colour. Recharts fills reference Chakra's emitted CSS variables (`CHART.grid`, `CHART.axis`, `CURRENCY_COLOR.ARS`, …), so charts follow the colour mode with **no `useTheme()` / `isDark` branching** — don't reintroduce it.

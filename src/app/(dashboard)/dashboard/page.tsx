@@ -6,7 +6,14 @@ import type { EquationTerm } from "@/components/dashboard/PatrimonyEquation";
 import { MonthFlow } from "@/components/dashboard/MonthFlow";
 import { ExchangeRates, type Rate } from "@/components/dashboard/ExchangeRates";
 import { LazySection } from "@/components/shared/LazySection";
-import { getDolarBlue, getEuroBlue, getDolarBlueHistory } from "@/lib/api/exchange-rates";
+import {
+  getDolarBlue,
+  getEuroBlue,
+  getDolarBlueHistory,
+  blueRateOn,
+} from "@/lib/api/exchange-rates";
+import { getMonthlyInflation, inflationBetween } from "@/lib/api/inflation";
+import { getCryptoPriceMap } from "@/lib/api/crypto-prices";
 import { buildAlerts, seriesChangePct } from "@/lib/utils/alerts";
 import { resolveCategories, iconMap, fixedCategoryNames } from "@/lib/utils/expense-categories";
 import { AlertsPanel } from "@/components/dashboard/AlertsPanel";
@@ -71,6 +78,8 @@ export default async function DashboardPage() {
     { data: platforms },
     blueHistory,
     { data: categoryRows },
+    { data: investments },
+    inflationSeries,
   ] = await Promise.all([
     supabase
       .from("patrimony_snapshots")
@@ -103,17 +112,25 @@ export default async function DashboardPage() {
       .from("platforms")
       .select("id, name")
       .eq("user_id", user!.id),
-    getDolarBlueHistory(8),
+    // A long window so past snapshots can be valued at the rate of their day.
+    getDolarBlueHistory(400),
     supabase
       .from("expense_categories")
       .select("*")
       .eq("user_id", user!.id)
       .order("sort_order"),
+    supabase
+      .from("investments")
+      .select("asset, asset_type, units, total_amount, currency")
+      .eq("user_id", user!.id),
+    getMonthlyInflation(),
   ]);
 
   // Falls back to the built-in list when the user hasn't customised one.
   const categories = resolveCategories(categoryRows);
   const categoryIcons = iconMap(categories);
+
+  const platformMap = Object.fromEntries((platforms ?? []).map((p: any) => [p.id, p.name]));
 
   const allExpenses = recentExpenses ?? [];
   const allIncomes = recentIncomes ?? [];
@@ -296,33 +313,104 @@ export default async function DashboardPage() {
     }
   }
 
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const daysSinceSnapshot = latest
     ? Math.floor(
         (now.getTime() - new Date(latest.date + "T00:00:00").getTime()) / 86_400_000
       )
     : null;
 
+  // Latest holdings split two ways: by currency (peso exposure) and by
+  // platform (concentration).
+  const latestByCurrency = new Map<string, number>();
+  const latestByPlatform = new Map<string, number>();
+  // The nested select comes back loosely typed; name the shape once here.
+  const snapshotItems = latestItems as unknown as {
+    platform_id: string;
+    currency: string;
+    amount: number;
+  }[];
+  for (const item of snapshotItems) {
+    const amountArs = convertToArs(Number(item.amount), item.currency, fx);
+    latestByCurrency.set(
+      item.currency,
+      (latestByCurrency.get(item.currency) ?? 0) + amountArs
+    );
+    const name = platformMap[item.platform_id] ?? "Sin plataforma";
+    latestByPlatform.set(name, (latestByPlatform.get(name) ?? 0) + amountArs);
+  }
   const usdHoldings = latestItems
     .filter((item) => (item as any).currency === "USD")
     .reduce((sum, item) => sum + Number((item as any).amount), 0);
 
+  // Income by source over the whole window, for the concentration check.
+  const sourceTotals = new Map<string, number>();
+  for (const i of allIncomes) {
+    sourceTotals.set(i.source, (sourceTotals.get(i.source) ?? 0) + toArs(i));
+  }
+
+  // Average purchase price per asset, in USD, mirroring the investments page.
+  const byAsset: Record<string, { invested: number; units: number }> = {};
+  for (const inv of investments ?? []) {
+    if (inv.asset_type !== "crypto") continue;
+    if (!byAsset[inv.asset]) byAsset[inv.asset] = { invested: 0, units: 0 };
+    let investedUsd = Number(inv.total_amount);
+    if (inv.currency === "ARS" && usdRate > 0) investedUsd /= usdRate;
+    byAsset[inv.asset].invested += investedUsd;
+    byAsset[inv.asset].units += Number(inv.units);
+  }
+  const priceMap = await getCryptoPriceMap(Object.keys(byAsset));
+  const positions = Object.entries(byAsset).map(([asset, d]) => ({
+    asset,
+    avgPriceUsd: d.units > 0 ? d.invested / d.units : null,
+    currentPriceUsd: priceMap[asset] ?? null,
+  }));
+
+  // Snapshots valued at the blue rate of their own date, so growth can be read
+  // in dollars as well as in pesos.
+  const snapshotList = sorted.map((s) => ({
+    date: s.date as string,
+    totalArs: Number(s.total_ars),
+  }));
+  const prevSnapshot = snapshotList[snapshotList.length - 2];
+  const lastSnapshot = snapshotList[snapshotList.length - 1];
+
   const alerts = buildAlerts({
-    expensesByMonth: expMonthMap,
-    currentByCategory: categoryMap,
-    fixedCategories: fixedCategoryNames(categories),
-    historyByCategory,
+    today: now,
     currentMonthKey: curMonth,
     prevMonthKey: prevMonth,
-    dayOfMonth: now.getDate(),
-    daysInMonth,
+    expensesByMonth: expMonthMap,
+    incomesByMonth: incMonthMap,
+    currentByCategory: categoryMap,
+    historyByCategory,
+    fixedCategories: fixedCategoryNames(categories),
+    expenses: allExpenses.map((e, i) => ({
+      id: `${e.date}-${i}`,
+      date: e.date,
+      category: e.category,
+      description: "",
+      amountArs: toArs(e),
+    })),
+    sourceTotals,
     totalIncomes,
     totalExpenses,
+    snapshots: snapshotList,
     daysSinceSnapshot,
+    latestByCurrency,
+    latestByPlatform,
+    positions,
     btcChange24h: cryptoPrices?.bitcoin?.usd_24h_change,
     ethChange24h: cryptoPrices?.ethereum?.usd_24h_change,
-    blueWeekChangePct: blueHistory ? seriesChangePct(blueHistory) : undefined,
+    blueWeekChangePct: blueHistory ? seriesChangePct(blueHistory.slice(-8)) : undefined,
+    blueSeries: blueHistory ?? undefined,
     usdHoldingsArs: usdHoldings * usdRate,
+    blueAtLatest:
+      blueHistory && lastSnapshot ? blueRateOn(blueHistory, lastSnapshot.date) : undefined,
+    blueAtPrevious:
+      blueHistory && prevSnapshot ? blueRateOn(blueHistory, prevSnapshot.date) : undefined,
+    inflationBetweenSnapshots:
+      inflationSeries && prevSnapshot && lastSnapshot
+        ? inflationBetween(inflationSeries, prevSnapshot.date, lastSnapshot.date)
+        : undefined,
   });
 
   // === Cashflow: the two series on one scale, so the gap reads as balance ===
@@ -336,7 +424,6 @@ export default async function DashboardPage() {
   }));
 
   // === Patrimony breakdown by platform ===
-  const platformMap = Object.fromEntries((platforms ?? []).map((p: any) => [p.id, p.name]));
   const platformTotals = new Map<string, number>();
   for (const item of latestItems) {
     const platformId = (item as any).platform_id as string;

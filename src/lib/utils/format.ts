@@ -36,6 +36,28 @@ export function formatDate(date: string | Date): string {
   });
 }
 
+/** Day and month, for pointing at a single transaction — e.g. `11 ago`. */
+export function formatDayMonth(date: string | Date): string {
+  const d =
+    typeof date === "string"
+      ? new Date(date.length === 10 ? date + "T00:00:00" : date)
+      : date;
+  return d.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
+}
+
+/**
+ * Whole pesos. Used in prose, where cents imply a precision that a projection
+ * or an average does not actually have.
+ */
+export function formatCurrencyWhole(
+  amount: number,
+  currency: Currency = "ARS"
+): string {
+  return `${CURRENCY_SYMBOLS[currency]} ${Math.round(amount).toLocaleString("es-AR", {
+    maximumFractionDigits: 0,
+  })}`;
+}
+
 export function formatDateShort(date: string | Date): string {
   let d: Date;
   if (typeof date === "string") {
