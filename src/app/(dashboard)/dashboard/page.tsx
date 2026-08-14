@@ -6,15 +6,9 @@ import type { EquationTerm } from "@/components/dashboard/PatrimonyEquation";
 import { MonthFlow } from "@/components/dashboard/MonthFlow";
 import { ExchangeRates, type Rate } from "@/components/dashboard/ExchangeRates";
 import { LazySection } from "@/components/shared/LazySection";
-import {
-  getDolarBlue,
-  getEuroBlue,
-  getDolarBlueHistory,
-  blueRateOn,
-} from "@/lib/api/exchange-rates";
+import { getDolarBlue, getEuroBlue } from "@/lib/api/exchange-rates";
 import { getMonthlyInflation, inflationBetween } from "@/lib/api/inflation";
-import { getCryptoPriceMap } from "@/lib/api/crypto-prices";
-import { buildAlerts, seriesChangePct } from "@/lib/utils/alerts";
+import { buildAlerts } from "@/lib/utils/alerts";
 import { resolveCategories, iconMap, fixedCategoryNames } from "@/lib/utils/expense-categories";
 import { AlertsPanel } from "@/components/dashboard/AlertsPanel";
 import { getCryptoPrices } from "@/lib/api/crypto-prices";
@@ -76,9 +70,7 @@ export default async function DashboardPage() {
     { data: recentExpenses },
     { data: recentIncomes },
     { data: platforms },
-    blueHistory,
     { data: categoryRows },
-    { data: investments },
     inflationSeries,
   ] = await Promise.all([
     supabase
@@ -112,17 +104,11 @@ export default async function DashboardPage() {
       .from("platforms")
       .select("id, name")
       .eq("user_id", user!.id),
-    // A long window so past snapshots can be valued at the rate of their day.
-    getDolarBlueHistory(400),
     supabase
       .from("expense_categories")
       .select("*")
       .eq("user_id", user!.id)
       .order("sort_order"),
-    supabase
-      .from("investments")
-      .select("asset, asset_type, units, total_amount, currency")
-      .eq("user_id", user!.id),
     getMonthlyInflation(),
   ]);
 
@@ -293,24 +279,15 @@ export default async function DashboardPage() {
   });
 
   // === Alerts: comparisons the user would otherwise make by hand ===
-  // Each category's totals for the months *before* this one, so "above average"
-  // means above its own norm rather than above other categories.
-  const historyByCategory = new Map<string, number[]>();
-  {
-    const perMonth = new Map<string, Map<string, number>>();
-    for (const e of allExpenses) {
-      const key = buildMonthKey(e.date);
-      if (key === curMonth) continue;
-      if (!perMonth.has(key)) perMonth.set(key, new Map());
-      const m = perMonth.get(key)!;
-      m.set(e.category, (m.get(e.category) ?? 0) + toArs(e));
-    }
-    for (const monthTotals of perMonth.values()) {
-      for (const [category, amount] of monthTotals) {
-        if (!historyByCategory.has(category)) historyByCategory.set(category, []);
-        historyByCategory.get(category)!.push(amount);
-      }
-    }
+  // Keyed by month so a rule can ask about a category's share of its month,
+  // not only its size.
+  const historyByMonth = new Map<string, Map<string, number>>();
+  for (const e of allExpenses) {
+    const key = buildMonthKey(e.date);
+    if (key === curMonth) continue;
+    if (!historyByMonth.has(key)) historyByMonth.set(key, new Map());
+    const month = historyByMonth.get(key)!;
+    month.set(e.category, (month.get(e.category) ?? 0) + toArs(e));
   }
 
   const daysSinceSnapshot = latest
@@ -338,35 +315,7 @@ export default async function DashboardPage() {
     const name = platformMap[item.platform_id] ?? "Sin plataforma";
     latestByPlatform.set(name, (latestByPlatform.get(name) ?? 0) + amountArs);
   }
-  const usdHoldings = latestItems
-    .filter((item) => (item as any).currency === "USD")
-    .reduce((sum, item) => sum + Number((item as any).amount), 0);
 
-  // Income by source over the whole window, for the concentration check.
-  const sourceTotals = new Map<string, number>();
-  for (const i of allIncomes) {
-    sourceTotals.set(i.source, (sourceTotals.get(i.source) ?? 0) + toArs(i));
-  }
-
-  // Average purchase price per asset, in USD, mirroring the investments page.
-  const byAsset: Record<string, { invested: number; units: number }> = {};
-  for (const inv of investments ?? []) {
-    if (inv.asset_type !== "crypto") continue;
-    if (!byAsset[inv.asset]) byAsset[inv.asset] = { invested: 0, units: 0 };
-    let investedUsd = Number(inv.total_amount);
-    if (inv.currency === "ARS" && usdRate > 0) investedUsd /= usdRate;
-    byAsset[inv.asset].invested += investedUsd;
-    byAsset[inv.asset].units += Number(inv.units);
-  }
-  const priceMap = await getCryptoPriceMap(Object.keys(byAsset));
-  const positions = Object.entries(byAsset).map(([asset, d]) => ({
-    asset,
-    avgPriceUsd: d.units > 0 ? d.invested / d.units : null,
-    currentPriceUsd: priceMap[asset] ?? null,
-  }));
-
-  // Snapshots valued at the blue rate of their own date, so growth can be read
-  // in dollars as well as in pesos.
   const snapshotList = sorted.map((s) => ({
     date: s.date as string,
     totalArs: Number(s.total_ars),
@@ -381,32 +330,20 @@ export default async function DashboardPage() {
     expensesByMonth: expMonthMap,
     incomesByMonth: incMonthMap,
     currentByCategory: categoryMap,
-    historyByCategory,
+    historyByMonth,
     fixedCategories: fixedCategoryNames(categories),
     expenses: allExpenses.map((e, i) => ({
       id: `${e.date}-${i}`,
       date: e.date,
       category: e.category,
-      description: "",
       amountArs: toArs(e),
     })),
-    sourceTotals,
     totalIncomes,
     totalExpenses,
     snapshots: snapshotList,
     daysSinceSnapshot,
     latestByCurrency,
     latestByPlatform,
-    positions,
-    btcChange24h: cryptoPrices?.bitcoin?.usd_24h_change,
-    ethChange24h: cryptoPrices?.ethereum?.usd_24h_change,
-    blueWeekChangePct: blueHistory ? seriesChangePct(blueHistory.slice(-8)) : undefined,
-    blueSeries: blueHistory ?? undefined,
-    usdHoldingsArs: usdHoldings * usdRate,
-    blueAtLatest:
-      blueHistory && lastSnapshot ? blueRateOn(blueHistory, lastSnapshot.date) : undefined,
-    blueAtPrevious:
-      blueHistory && prevSnapshot ? blueRateOn(blueHistory, prevSnapshot.date) : undefined,
     inflationBetweenSnapshots:
       inflationSeries && prevSnapshot && lastSnapshot
         ? inflationBetween(inflationSeries, prevSnapshot.date, lastSnapshot.date)

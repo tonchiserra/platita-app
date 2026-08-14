@@ -1,8 +1,6 @@
 export interface CryptoQuote {
   usd: number;
   last_updated_at: number;
-  /** Percent change over the last 24h, used to flag sharp moves. */
-  usd_24h_change?: number;
 }
 
 export interface CryptoPrices {
@@ -13,7 +11,7 @@ export interface CryptoPrices {
 export async function getCryptoPrices(): Promise<CryptoPrices | null> {
   try {
     const res = await fetch(
-      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_last_updated_at=true&include_24hr_change=true",
+      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_last_updated_at=true",
       { next: { revalidate: 300 } } // cache 5 minutes
     );
     if (!res.ok) return null;

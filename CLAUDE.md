@@ -139,7 +139,7 @@ Two design constraints worth keeping:
 - **Thresholds live in the `T` object** and are deliberately loose. An alert that fires every month is noise, so each rule must stay silent in an ordinary month.
 - **Never state something arithmetic guarantees.** With two categories one must exceed 40 %, so `dominantCategory` requires four; likewise `platformConcentration` requires three platforms. Guards like these are the difference between an alert and a truism.
 
-Rate history and inflation come from argentinadatos (`getDolarBlueHistory`, `getMonthlyInflation`); both are fetched server-side with long revalidates and return `null` on failure, so the rules that depend on them simply don't fire when the upstream is down.
+Monthly CPI comes from argentinadatos (`getMonthlyInflation`), fetched server-side on a long revalidate and returning `null` on failure — so the rule that depends on it simply doesn't fire when the upstream is down.
 
 ### Charts
 
