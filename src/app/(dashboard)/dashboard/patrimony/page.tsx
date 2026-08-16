@@ -1,9 +1,16 @@
 import dynamic from "next/dynamic";
 import { createClient, getUser } from "@/lib/supabase/server";
 import { LazySection } from "@/components/shared/LazySection";
-import { getDolarBlue, getEuroBlue } from "@/lib/api/exchange-rates";
+import {
+  getDolarBlue,
+  getEuroBlue,
+  getDolarBlueHistory,
+  blueRateOn,
+} from "@/lib/api/exchange-rates";
+import { getMonthlyInflation } from "@/lib/api/inflation";
 import { getCryptoPrices } from "@/lib/api/crypto-prices";
 import { convertToArs } from "@/lib/utils/currency-conversion";
+import { buildTimeline, type TimelineFlow } from "@/lib/utils/patrimony-timeline";
 import { PatrimonyPageClient } from "@/components/patrimony/PatrimonyPageClient";
 import type { ExchangeRates, PatrimonySnapshotFull } from "@/types/database";
 
@@ -13,27 +20,50 @@ const PatrimonyChart = dynamic(() =>
 const PatrimonyBreakdownChart = dynamic(() =>
   import("@/components/patrimony/PatrimonyBreakdownChart").then((m) => m.PatrimonyBreakdownChart)
 );
+const AlternativesChart = dynamic(() =>
+  import("@/components/patrimony/AlternativesChart").then((m) => m.AlternativesChart)
+);
 
 export default async function PatrimonyPage() {
   const [user, supabase] = await Promise.all([getUser(), createClient()]);
 
-  const [{ data: platforms }, { data: rawSnapshots }, dolarBlue, euroBlue, cryptoPrices] =
-    await Promise.all([
-      supabase
-        .from("platforms")
-        .select("*")
-        .eq("user_id", user!.id)
-        .eq("is_active", true)
-        .order("name"),
-      supabase
-        .from("patrimony_snapshots")
-        .select("*, patrimony_snapshot_items(id, snapshot_id, platform_id, currency, amount)")
-        .eq("user_id", user!.id)
-        .order("date", { ascending: false }),
-      getDolarBlue(),
-      getEuroBlue(),
-      getCryptoPrices(),
-    ]);
+  const [
+    { data: platforms },
+    { data: rawSnapshots },
+    dolarBlue,
+    euroBlue,
+    cryptoPrices,
+    { data: rawExpenses },
+    { data: rawIncomes },
+    blueSeries,
+    inflationSeries,
+  ] = await Promise.all([
+    supabase
+      .from("platforms")
+      .select("*")
+      .eq("user_id", user!.id)
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("patrimony_snapshots")
+      .select("*, patrimony_snapshot_items(id, snapshot_id, platform_id, currency, amount)")
+      .eq("user_id", user!.id)
+      .order("date", { ascending: false }),
+    getDolarBlue(),
+    getEuroBlue(),
+    getCryptoPrices(),
+    // The "Todo" range needs every flow, not a twelve-month window.
+    supabase
+      .from("expenses")
+      .select("amount, currency, date")
+      .eq("user_id", user!.id),
+    supabase
+      .from("incomes")
+      .select("amount, currency, date")
+      .eq("user_id", user!.id),
+    getDolarBlueHistory(),
+    getMonthlyInflation(120),
+  ]);
 
   const exchangeRates: ExchangeRates = {
     usdRate: dolarBlue?.venta ?? 0,
@@ -84,6 +114,39 @@ export default async function PatrimonyPage() {
     total_ars: s.total_ars,
   }));
 
+  // Historical flows are valued at the rate of their own date, not today's.
+  // Only ARS and USD get that treatment because they are the only currencies
+  // with a historical series here; the rest fall back to current rates.
+  const flowToArs = (row: { amount: number; currency: string; date: string }) => {
+    const amount = Number(row.amount);
+    if (row.currency === "ARS") return amount;
+    if (row.currency === "USD" && blueSeries) {
+      const rate = blueRateOn(blueSeries, row.date);
+      if (rate) return amount * rate;
+    }
+    return convertToArs(amount, row.currency, exchangeRates);
+  };
+
+  const flows: TimelineFlow[] = [
+    ...(rawIncomes ?? []).map((row) => ({
+      date: row.date as string,
+      amountArs: flowToArs(row),
+      sign: 1 as const,
+    })),
+    ...(rawExpenses ?? []).map((row) => ({
+      date: row.date as string,
+      amountArs: flowToArs(row),
+      sign: -1 as const,
+    })),
+  ];
+
+  const timeline = buildTimeline({
+    snapshots: chartData.map((s) => ({ date: s.date, totalArs: s.total_ars })),
+    flows,
+    blueSeries,
+    inflationSeries,
+  });
+
   // Breakdown data from latest snapshot
   const latestItems = snapshotsWithItems[0]?.items ?? [];
   const platformTotals = new Map<string, number>();
@@ -113,6 +176,9 @@ export default async function PatrimonyPage() {
     >
       <LazySection minHeight="300px">
         <PatrimonyChart data={chartData} />
+      </LazySection>
+      <LazySection minHeight="380px">
+        <AlternativesChart points={timeline} />
       </LazySection>
       {breakdownData.length > 0 && (
         <LazySection minHeight="300px">
