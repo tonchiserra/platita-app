@@ -29,6 +29,43 @@ export async function getDolarOficial(): Promise<DolarRate | null> {
   }
 }
 
+export interface DolarHistoryPoint {
+  fecha: string;
+  compra: number;
+  venta: number;
+}
+
+/** Blue sell rate on `date`, or the closest earlier quote (weekends, holidays). */
+export function blueRateOn(
+  series: DolarHistoryPoint[],
+  date: string
+): number | undefined {
+  let best: DolarHistoryPoint | undefined;
+  for (const point of series) {
+    if (point.fecha <= date && (!best || point.fecha > best.fecha)) best = point;
+  }
+  return best?.venta;
+}
+
+/**
+ * Blue history, for valuing past snapshots at the rate of their own day. The
+ * upstream only serves the whole series (~500 KB) with no date-scoped
+ * endpoint, so this runs server-side on a long revalidate and returns the tail.
+ */
+export async function getDolarBlueHistory(days = 2000): Promise<DolarHistoryPoint[] | null> {
+  try {
+    const res = await fetch("https://api.argentinadatos.com/v1/cotizaciones/dolares/blue", {
+      next: { revalidate: 21600 }, // 6 hours — a daily series does not move faster
+    });
+    if (!res.ok) return null;
+    const all = (await res.json()) as DolarHistoryPoint[];
+    if (!Array.isArray(all)) return null;
+    return all.slice(-days);
+  } catch {
+    return null;
+  }
+}
+
 export async function getEuroBlue(): Promise<DolarRate | null> {
   try {
     const res = await fetch("https://dolarapi.com/v1/cotizaciones/eur", {
