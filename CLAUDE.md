@@ -145,6 +145,8 @@ Monthly CPI comes from argentinadatos (`getMonthlyInflation`), fetched server-si
 
 `src/lib/constants/colors.ts` is the single source of chart colour. Recharts fills reference Chakra's emitted CSS variables (`CHART.grid`, `CHART.axis`, `CURRENCY_COLOR.ARS`, …), so charts follow the colour mode with **no `useTheme()` / `isDark` branching** — don't reintroduce it.
 
+`AlternativesChart` compares net worth against three counterfactuals built from the same contributions. The maths lives in `src/lib/utils/patrimony-alternatives.ts` as a pure isomorphic function with **no imports**, because the range selector re-bases the whole calculation client-side — a different anchor produces different counterfactuals rather than a shifted line, and keeping the module import-free stops `src/lib/api/*` from reaching the client bundle. `src/lib/utils/patrimony-timeline.ts` holds the server-side half. Its y-axis deliberately does not start at zero: the gaps between the lines are the point.
+
 Breakdowns are always sorted by amount, so they use a single-hue ramp (`RAMP_EXPENSE`, `RAMP_INCOME`, `RAMP_PLATFORM` via `rampColor(ramp, i)`) where colour encodes rank. Reach for a ranked bar list when the data is a ranking, and a stacked bar when it is a composition of one whole — the multi-hue donut this replaced encoded nothing.
 
 ### Key Patterns & Gotchas

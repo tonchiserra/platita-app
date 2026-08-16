@@ -36,9 +36,19 @@ const TIME_RANGES = [
 const SERIES = [
   { key: "patrimony", label: "Tu patrimonio", color: "var(--chakra-colors-fg-heading)", dash: undefined, width: 2.5 },
   { key: "dollarized", label: "Si te dolarizabas", color: "var(--chakra-colors-cur-usd)", dash: "6 4", width: 1.8 },
-  { key: "inflation", label: "Empatar la inflación", color: "var(--chakra-colors-fg-body)", dash: "2 3", width: 1.8 },
-  { key: "mattress", label: "En el colchón", color: "var(--chakra-colors-border-strong)", dash: "10 5", width: 1.8 },
+  { key: "inflation", label: "Empatar la inflación", color: "var(--chakra-colors-fg-body)", dash: "1 4", width: 2 },
+  { key: "mattress", label: "En el colchón", color: "var(--chakra-colors-fg-muted)", dash: "10 6", width: 1.8 },
 ] as const;
+
+/** Rounds up to 1, 2, 2.5 or 5 x 10ⁿ, so gridline labels read as round numbers. */
+function niceStep(value: number): number {
+  if (value <= 0) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  const normalised = value / magnitude;
+  const nice =
+    normalised <= 1 ? 1 : normalised <= 2 ? 2 : normalised <= 2.5 ? 2.5 : normalised <= 5 ? 5 : 10;
+  return nice * magnitude;
+}
 
 function compact(value: number): string {
   const abs = Math.abs(value);
@@ -59,7 +69,16 @@ function AlternativesTooltip({ active, payload, mask }: TooltipProps) {
   const point = payload[0].payload;
 
   return (
-    <Box bg="bg.card" border="1px solid" borderColor="border.card" borderRadius="lg" p="3" minW="230px">
+    <Box
+      bg="bg.card"
+      border="1px solid"
+      borderColor="border.card"
+      borderRadius="lg"
+      p="3"
+      /* A fixed min-width would push past the card on a narrow screen. */
+      minW={{ base: "0", sm: "230px" }}
+      maxW="72vw"
+    >
       <Text fontSize="xs" color="fg.body" mb="2">
         {formatDateShort(point.date)}
       </Text>
@@ -119,6 +138,29 @@ export function AlternativesChart({ points }: { points: TimelinePoint[] }) {
     }
     return buildAlternatives(slice);
   }, [points, selectedRange]);
+
+  // A zero-based axis squeezes all four lines into a band, and the gaps between
+  // them are the whole point. The domain hugs the data instead, snapped to a
+  // round step so the gridline labels stay readable.
+  const scale = useMemo(() => {
+    const values = data.flatMap((d) =>
+      [d.patrimony, d.mattress, d.inflation, d.dollarized].filter(
+        (v): v is number => v !== null
+      )
+    );
+    if (values.length === 0) return undefined;
+
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const pad = (max - min) * 0.12 || Math.abs(max) * 0.1 || 1;
+    const step = niceStep((max + pad - (min - pad)) / 4);
+    const lower = Math.floor((min - pad) / step) * step;
+    const upper = Math.ceil((max + pad) / step) * step;
+
+    const ticks: number[] = [];
+    for (let v = lower; v <= upper + step / 2; v += step) ticks.push(v);
+    return { domain: [lower, upper] as [number, number], ticks };
+  }, [data]);
 
   if (points.length < 2) return null;
 
@@ -180,6 +222,8 @@ export function AlternativesChart({ points }: { points: TimelinePoint[] }) {
                 minTickGap={24}
               />
               <YAxis
+                domain={scale?.domain}
+                ticks={scale?.ticks}
                 stroke={CHART.axis}
                 fontSize={11}
                 tickLine={false}
