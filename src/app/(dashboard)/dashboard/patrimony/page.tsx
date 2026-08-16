@@ -11,6 +11,7 @@ import { getMonthlyInflation } from "@/lib/api/inflation";
 import { getCryptoPrices } from "@/lib/api/crypto-prices";
 import { convertToArs } from "@/lib/utils/currency-conversion";
 import { buildTimeline, type TimelineFlow } from "@/lib/utils/patrimony-timeline";
+import { RETURN_SOURCES } from "@/lib/constants/sources";
 import { PatrimonyPageClient } from "@/components/patrimony/PatrimonyPageClient";
 import type { ExchangeRates, PatrimonySnapshotFull } from "@/types/database";
 
@@ -59,7 +60,8 @@ export default async function PatrimonyPage() {
       .eq("user_id", user!.id),
     supabase
       .from("incomes")
-      .select("amount, currency, date")
+      // `source` is needed to leave investment returns out of the alternatives.
+      .select("amount, currency, date, source")
       .eq("user_id", user!.id),
     getDolarBlueHistory(),
     getMonthlyInflation(120),
@@ -128,11 +130,15 @@ export default async function PatrimonyPage() {
   };
 
   const flows: TimelineFlow[] = [
-    ...(rawIncomes ?? []).map((row) => ({
-      date: row.date as string,
-      amountArs: flowToArs(row),
-      sign: 1 as const,
-    })),
+    // Returns on money you already had are income, but not *new* money, so the
+    // alternatives must not be credited with them. See RETURN_SOURCES.
+    ...(rawIncomes ?? [])
+      .filter((row) => !RETURN_SOURCES.has(row.source as string))
+      .map((row) => ({
+        date: row.date as string,
+        amountArs: flowToArs(row),
+        sign: 1 as const,
+      })),
     ...(rawExpenses ?? []).map((row) => ({
       date: row.date as string,
       amountArs: flowToArs(row),
