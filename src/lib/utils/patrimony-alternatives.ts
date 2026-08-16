@@ -1,90 +1,85 @@
 /**
- * One snapshot on the timeline. `netSavingsArs` and `inflationPct` describe the
- * interval *since the previous point*, so both are ignored on the first point
- * of whatever slice is being charted. `blueRate` is the rate on this date.
+ * One month on the timeline. Everything here describes that month alone; the
+ * running totals are built by `buildAlternatives`.
+ *
+ * This module stays import-free on purpose: a client component imports it, and
+ * reaching into `src/lib/api/*` would drag `fetch` calls into the bundle.
  */
 export interface TimelinePoint {
+  /** `YYYY-MM`. */
+  month: string;
+  /** Last day of the month, used as the x value. */
   date: string;
-  patrimonyArs: number;
+  /** Recorded net worth for that month, when a snapshot exists. */
+  patrimonyArs: number | null;
+  /** Income minus expenses that month, in pesos of that month. */
   netSavingsArs: number;
+  /** The same flows, in dollars bought at that month's rate. */
+  netSavingsUsd: number | null;
+  /** Blue sell rate at month end. */
   blueRate?: number;
+  /** That month's CPI, as a percentage. */
   inflationPct?: number;
 }
 
 export interface AlternativesPoint {
   date: string;
-  /** What actually happened. */
-  patrimony: number;
-  /** Nominal pesos, never revalued. */
+  /** What was actually recorded. Null in months without a snapshot. */
+  patrimony: number | null;
+  /** Every peso saved, kept as pesos. */
   mattress: number;
-  /** What it would take to hold purchasing power. Null once CPI runs out. */
-  inflation: number | null;
-  /** Every peso converted to dollars the month it arrived. Null without rates. */
+  /** Every peso saved, turned into dollars that month, valued at today's rate. */
   dollarized: number | null;
+  /** What the mattress pesos really buy, in money of the first month. */
+  mattressReal: number | null;
 }
 
 /**
- * Turns a timeline into four comparable series.
+ * Accumulates the flows three ways and returns one row per month.
  *
- * The three counterfactuals are the same operation in different units: convert
- * each incoming peso into something that does not devalue, accumulate those
- * units, then revalue at each point.
+ * All four lines start from the same anchor: the patrimony as of the month of
+ * the first recorded movement. From there each alternative carries that money
+ * in a different unit and adds what was saved each month.
  *
- *   mattress(i)   =         P0 + Σ c
- *   inflation(i)  = idx_i × ( P0/idx_0  + Σ c/idx )
- *   dollarized(i) = blue_i × ( P0/blue_0 + Σ c/blue )
+ *   mattress(i)     = P0 + Σ savings, in pesos
+ *   dollarized(i)   = blue_i × ( P0/blue_0 + Σ savings ÷ blue of their month )
+ *   mattressReal(i) = mattress(i) ÷ inflation accumulated since the anchor
  *
- * The first point is the anchor: all four lines start at its patrimony, which
- * is what makes the comparison mean anything.
+ * The anchor month contributes no savings: its closing balance already
+ * reflects that month's income and expenses, so adding them would count twice.
+ *
+ * The caller passes the whole history and slices the *result* for display.
+ * Recomputing per visible range would make each range a different chart rather
+ * than a window onto one.
  */
 export function buildAlternatives(points: TimelinePoint[]): AlternativesPoint[] {
-  if (points.length < 2) return [];
+  if (points.length === 0) return [];
 
-  const anchor = points[0];
-  const start = anchor.patrimonyArs;
+  const anchorArs = points[0].patrimonyArs ?? 0;
+  const anchorBlue = points[0].blueRate;
 
-  // Running unit balances. Each is "how much of unit X we hold".
-  let nominal = start;
-  let realUnits = start; // start / idx_0, and idx_0 is 1 by definition
+  let pesos = anchorArs;
+  let dollars = anchorBlue ? anchorArs / anchorBlue : null;
   let index = 1;
-
-  const startBlue = anchor.blueRate;
-  let usdUnits = startBlue && startBlue > 0 ? start / startBlue : null;
-
-  // Once an input runs out mid-series the line ends rather than guessing.
   let cpiStopped = false;
 
   return points.map((point, i) => {
     if (i > 0) {
-      const contribution = point.netSavingsArs;
+      pesos += point.netSavingsArs;
 
-      nominal += contribution;
+      if (dollars === null || point.netSavingsUsd === null) dollars = null;
+      else dollars += point.netSavingsUsd;
 
-      if (point.inflationPct === undefined) {
-        cpiStopped = true;
-      } else if (!cpiStopped) {
-        index *= 1 + point.inflationPct / 100;
-        realUnits += contribution / index;
-      }
-
-      if (usdUnits !== null) {
-        if (point.blueRate && point.blueRate > 0) {
-          usdUnits += contribution / point.blueRate;
-        } else {
-          usdUnits = null;
-        }
-      }
+      if (point.inflationPct === undefined) cpiStopped = true;
+      else if (!cpiStopped) index *= 1 + point.inflationPct / 100;
     }
 
     return {
       date: point.date,
       patrimony: point.patrimonyArs,
-      mattress: nominal,
-      inflation: cpiStopped ? null : realUnits * index,
-      dollarized:
-        usdUnits !== null && point.blueRate && point.blueRate > 0
-          ? usdUnits * point.blueRate
-          : null,
+      mattress: pesos,
+      dollarized: dollars !== null && point.blueRate ? dollars * point.blueRate : null,
+      mattressReal: cpiStopped ? null : pesos / index,
     };
   });
 }

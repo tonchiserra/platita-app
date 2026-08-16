@@ -31,7 +31,7 @@ const TIME_RANGES = [
 
 /**
  * All four solid, told apart by hue rather than dash pattern — dashes were not
- * enough separation at these line widths. The dollarized line takes `cur.usd`
+ * enough separation at these widths. The dollarized line takes `cur.usd`
  * because it really is dollars; the two benchmarks get hues of their own rather
  * than borrowing a currency's.
  */
@@ -42,7 +42,7 @@ const SERIES = [
     color: "var(--chakra-colors-fg-heading)",
     width: 3,
     description:
-      "Lo que efectivamente pasó: el total de cada cierre que registraste, valuado a la cotización de ese día.",
+      "El patrimonio que cargaste mes a mes, valuado a la cotización de cada cierre.",
   },
   {
     key: "dollarized",
@@ -50,15 +50,7 @@ const SERIES = [
     color: "var(--chakra-colors-cur-usd)",
     width: 2,
     description:
-      "Si cada peso que ahorraste lo hubieras pasado a dólares el mes que entró, y los hubieras dejado quietos.",
-  },
-  {
-    key: "inflation",
-    label: "Empatar la inflación",
-    color: "var(--chakra-colors-bench-inflation)",
-    width: 2,
-    description:
-      "Lo que necesitarías tener hoy para comprar exactamente lo mismo que al principio. Por encima de esta línea ganaste poder de compra.",
+      "Si al cargar tu primer movimiento hubieras pasado todo a dólares, y cada mes también lo que te sobró. Sube y baja con el blue.",
   },
   {
     key: "mattress",
@@ -66,7 +58,15 @@ const SERIES = [
     color: "var(--chakra-colors-bench-mattress)",
     width: 2,
     description:
-      "Si la plata hubiera quedado en pesos, quieta, sin rendir nada ni cambiar de moneda.",
+      "Si desde ese mismo punto la plata hubiera quedado en pesos, quieta, sumándole lo que te sobró cada mes. No rinde ni cambia de moneda.",
+  },
+  {
+    key: "mattressReal",
+    label: "Valor real del colchón",
+    color: "var(--chakra-colors-bench-inflation)",
+    width: 2,
+    description:
+      "Lo que esos mismos pesos del colchón realmente compran, medido en plata del mes en que arranca el gráfico. La distancia con la línea del colchón es lo que se comió la inflación.",
   },
 ] as const;
 
@@ -116,7 +116,10 @@ function AlternativesTooltip({ active, payload, mask }: TooltipProps) {
         {SERIES.map((series) => {
           const value = point[series.key];
           if (value === null) return null;
-          const gap = value - point.patrimony;
+          const gap =
+            point.patrimony !== null && series.key !== "patrimony"
+              ? value - point.patrimony
+              : null;
           return (
             <Flex key={series.key} justify="space-between" gap="4" align="baseline">
               <Flex align="center" gap="2" minW="0">
@@ -129,7 +132,7 @@ function AlternativesTooltip({ active, payload, mask }: TooltipProps) {
                 <Text fontFamily="mono" fontSize="xs" color="fg.heading" data-num>
                   {mask(formatCurrencyWhole(value))}
                 </Text>
-                {series.key !== "patrimony" && (
+                {gap !== null && (
                   <Text
                     fontFamily="mono"
                     fontSize="2xs"
@@ -155,28 +158,28 @@ export function AlternativesChart({ points }: { points: TimelinePoint[] }) {
   const explanation = SERIES.find((series) => series.key === explained);
   const { mask } = useMoneyVisibility();
 
-  // Re-basing is not an offset: a different anchor produces different
-  // counterfactuals, so the whole calculation reruns for the chosen window.
+  // Computed once over the whole history. The range crops this result rather
+  // than recomputing from a later anchor — recomputing made 3M, 6M and 1A three
+  // different charts instead of three windows onto the same one.
+  const series = useMemo(() => buildAlternatives(points), [points]);
+
   const data = useMemo(() => {
     const range = TIME_RANGES.find((r) => r.label === selectedRange);
-    let slice = points;
-    if (range && range.months > 0) {
-      // Same cutoff idiom as PatrimonyChart, so both charts agree on a range.
-      const cutoff = new Date();
-      cutoff.setDate(1);
-      cutoff.setMonth(cutoff.getMonth() - range.months);
-      const cutoffStr = cutoff.toISOString().split("T")[0];
-      slice = points.filter((p) => p.date >= cutoffStr);
-    }
-    return buildAlternatives(slice);
-  }, [points, selectedRange]);
+    if (!range || range.months === 0) return series;
+    // Same cutoff idiom as PatrimonyChart, so both charts agree on a range.
+    const cutoff = new Date();
+    cutoff.setDate(1);
+    cutoff.setMonth(cutoff.getMonth() - range.months);
+    const cutoffStr = cutoff.toISOString().split("T")[0];
+    return series.filter((d) => d.date >= cutoffStr);
+  }, [series, selectedRange]);
 
   // A zero-based axis squeezes all four lines into a band, and the gaps between
   // them are the whole point. The domain hugs the data instead, snapped to a
   // round step so the gridline labels stay readable.
   const scale = useMemo(() => {
     const values = data.flatMap((d) =>
-      [d.patrimony, d.mattress, d.inflation, d.dollarized].filter(
+      [d.patrimony, d.mattress, d.mattressReal, d.dollarized].filter(
         (v): v is number => v !== null
       )
     );
@@ -186,7 +189,10 @@ export function AlternativesChart({ points }: { points: TimelinePoint[] }) {
     const max = Math.max(...values);
     const pad = (max - min) * 0.12 || Math.abs(max) * 0.1 || 1;
     const step = niceStep((max + pad - (min - pad)) / 4);
-    const lower = Math.floor((min - pad) / step) * step;
+    // Padding below zero would leave a band of empty negative space; only go
+    // there when the data actually does.
+    const floor = min >= 0 ? 0 : min - pad;
+    const lower = Math.max(Math.floor((min - pad) / step) * step, floor);
     const upper = Math.ceil((max + pad) / step) * step;
 
     const ticks: number[] = [];
@@ -194,7 +200,7 @@ export function AlternativesChart({ points }: { points: TimelinePoint[] }) {
     return { domain: [lower, upper] as [number, number], ticks };
   }, [data]);
 
-  if (points.length < 2) return null;
+  if (series.length < 2) return null;
 
   return (
     <Box bg="bg.card" borderRadius="xl" border="1px solid" borderColor="border.card" p="6">
@@ -221,7 +227,7 @@ export function AlternativesChart({ points }: { points: TimelinePoint[] }) {
         </Flex>
       </Flex>
       <Text fontSize="xs" color="fg.muted" mb="4">
-        Qué habría pasado con la misma plata
+        Desde tu primer movimiento registrado, con la misma plata
       </Text>
 
       {data.length < 2 ? (
@@ -334,7 +340,7 @@ export function AlternativesChart({ points }: { points: TimelinePoint[] }) {
                   strokeWidth={series.width}
                   dot={false}
                   activeDot={series.key === "patrimony" ? { r: 4 } : false}
-                  connectNulls={false}
+                  connectNulls={series.key === "patrimony"}
                   isAnimationActive={false}
                 />
               ))}
@@ -342,7 +348,7 @@ export function AlternativesChart({ points }: { points: TimelinePoint[] }) {
           </ResponsiveContainer>
 
           <Text fontSize="2xs" color="fg.muted" mt="3">
-            Las alternativas se calculan sobre los ingresos y gastos que registraste.
+            Las alternativas se calculan sobre los ingresos y gastos que registraste, sin contar los ingresos por retorno de inversión.
           </Text>
         </>
       )}
