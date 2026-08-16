@@ -95,6 +95,15 @@ const config = defineConfig({
           up: { value: { base: "#2e8b57", _dark: "#4fb37b" } },
           down: { value: { base: "#c4453a", _dark: "#e06a5e" } },
         },
+        /**
+         * Benchmark lines on the alternatives chart. These are not currencies
+         * and not directions, so they need hues of their own — reusing a `cur.*`
+         * hue would claim a currency that isn't there.
+         */
+        bench: {
+          inflation: { value: { base: "#b8437f", _dark: "#ee85bb" } },
+          mattress: { value: { base: "#96692f", _dark: "#d8a75c" } },
+        },
         // Denominational palette: colour encodes the currency, not decoration.
         cur: {
           ars: { value: { base: "#3a86c8", _dark: "#5aa3e0" } },

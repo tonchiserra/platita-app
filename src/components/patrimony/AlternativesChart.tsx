@@ -30,14 +30,44 @@ const TIME_RANGES = [
 ] as const;
 
 /**
- * Only the dollarized line carries a currency hue, because it is the only one
- * that is a currency. The rest are neutral and told apart by dash pattern.
+ * All four solid, told apart by hue rather than dash pattern — dashes were not
+ * enough separation at these line widths. The dollarized line takes `cur.usd`
+ * because it really is dollars; the two benchmarks get hues of their own rather
+ * than borrowing a currency's.
  */
 const SERIES = [
-  { key: "patrimony", label: "Tu patrimonio", color: "var(--chakra-colors-fg-heading)", dash: undefined, width: 2.5 },
-  { key: "dollarized", label: "Si te dolarizabas", color: "var(--chakra-colors-cur-usd)", dash: "6 4", width: 1.8 },
-  { key: "inflation", label: "Empatar la inflación", color: "var(--chakra-colors-fg-body)", dash: "1 4", width: 2 },
-  { key: "mattress", label: "En el colchón", color: "var(--chakra-colors-fg-muted)", dash: "10 6", width: 1.8 },
+  {
+    key: "patrimony",
+    label: "Tu patrimonio",
+    color: "var(--chakra-colors-fg-heading)",
+    width: 3,
+    description:
+      "Lo que efectivamente pasó: el total de cada cierre que registraste, valuado a la cotización de ese día.",
+  },
+  {
+    key: "dollarized",
+    label: "Si te dolarizabas",
+    color: "var(--chakra-colors-cur-usd)",
+    width: 2,
+    description:
+      "Si cada peso que ahorraste lo hubieras pasado a dólares el mes que entró, y los hubieras dejado quietos.",
+  },
+  {
+    key: "inflation",
+    label: "Empatar la inflación",
+    color: "var(--chakra-colors-bench-inflation)",
+    width: 2,
+    description:
+      "Lo que necesitarías tener hoy para comprar exactamente lo mismo que al principio. Por encima de esta línea ganaste poder de compra.",
+  },
+  {
+    key: "mattress",
+    label: "En el colchón",
+    color: "var(--chakra-colors-bench-mattress)",
+    width: 2,
+    description:
+      "Si la plata hubiera quedado en pesos, quieta, sin rendir nada ni cambiar de moneda.",
+  },
 ] as const;
 
 /** Rounds up to 1, 2, 2.5 or 5 x 10ⁿ, so gridline labels read as round numbers. */
@@ -121,6 +151,8 @@ function AlternativesTooltip({ active, payload, mask }: TooltipProps) {
 
 export function AlternativesChart({ points }: { points: TimelinePoint[] }) {
   const [selectedRange, setSelectedRange] = useState("1A");
+  const [explained, setExplained] = useState<string | null>(null);
+  const explanation = SERIES.find((series) => series.key === explained);
   const { mask } = useMoneyVisibility();
 
   // Re-basing is not an offset: a different anchor produces different
@@ -198,16 +230,77 @@ export function AlternativesChart({ points }: { points: TimelinePoint[] }) {
         </Text>
       ) : (
         <>
-          <Flex wrap="wrap" gap="4" mb="3">
-            {SERIES.map((series) => (
-              <Flex key={series.key} align="center" gap="2">
-                <Box w="14px" h="2px" bg={series.color} />
-                <Text fontSize="xs" color="fg.body">
-                  {series.label}
+          {/* Each reference explains itself. Hover covers the desktop reading;
+              tapping pins it open, because hover does not exist on touch.
+              The panel anchors to the legend box rather than to the item: the
+              legend wraps on narrow screens, so an item-relative anchor sends
+              the panel off one edge or the other. */}
+          <Box position="relative" mb="3">
+            <Flex wrap="wrap" gap="4">
+              {SERIES.map((series) => {
+                const open = explained === series.key;
+                return (
+                  <Flex
+                    as="button"
+                    key={series.key}
+                    align="center"
+                    gap="2"
+                    px="0"
+                    py="0"
+                    cursor="help"
+                    aria-expanded={open}
+                    onMouseEnter={() => setExplained(series.key)}
+                    onMouseLeave={() =>
+                      setExplained((current) => (current === series.key ? null : current))
+                    }
+                    onFocus={() => setExplained(series.key)}
+                    onBlur={() => setExplained(null)}
+                    onClick={() =>
+                      setExplained((current) => (current === series.key ? null : series.key))
+                    }
+                  >
+                    <Box w="14px" h="3px" borderRadius="full" bg={series.color} flexShrink={0} />
+                    <Text
+                      fontSize="xs"
+                      color={open ? "fg.heading" : "fg.body"}
+                      borderBottom="1px dashed"
+                      borderColor="border.strong"
+                      transition="color 0.14s"
+                    >
+                      {series.label}
+                    </Text>
+                  </Flex>
+                );
+              })}
+            </Flex>
+
+            {explanation && (
+              <Box
+                position="absolute"
+                top="100%"
+                left="0"
+                mt="2"
+                zIndex="10"
+                maxW="min(340px, 100%)"
+                bg="bg.card"
+                border="1px solid"
+                borderColor="border.card"
+                borderRadius="lg"
+                boxShadow="0 6px 20px rgba(0,0,0,0.10)"
+                p="3"
+              >
+                <Flex align="center" gap="2" mb="1.5">
+                  <Box w="14px" h="3px" borderRadius="full" bg={explanation.color} flexShrink={0} />
+                  <Text fontSize="xs" fontWeight="semibold" color="fg.heading">
+                    {explanation.label}
+                  </Text>
+                </Flex>
+                <Text fontSize="xs" color="fg.body" lineHeight="1.5">
+                  {explanation.description}
                 </Text>
-              </Flex>
-            ))}
-          </Flex>
+              </Box>
+            )}
+          </Box>
 
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={data} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
@@ -239,7 +332,6 @@ export function AlternativesChart({ points }: { points: TimelinePoint[] }) {
                   name={series.label}
                   stroke={series.color}
                   strokeWidth={series.width}
-                  strokeDasharray={series.dash}
                   dot={false}
                   activeDot={series.key === "patrimony" ? { r: 4 } : false}
                   connectNulls={false}
