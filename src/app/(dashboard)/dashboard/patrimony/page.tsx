@@ -7,7 +7,7 @@ import {
   getDolarBlueHistory,
   blueRateOn,
 } from "@/lib/api/exchange-rates";
-import { getMonthlyInflation } from "@/lib/api/inflation";
+import { getMonthlyInflation, getUsCpiIndex } from "@/lib/api/inflation";
 import { getCryptoPrices } from "@/lib/api/crypto-prices";
 import { convertToArs } from "@/lib/utils/currency-conversion";
 import { buildTimeline, type TimelineFlow } from "@/lib/utils/patrimony-timeline";
@@ -38,6 +38,7 @@ export default async function PatrimonyPage() {
     { data: rawIncomes },
     blueSeries,
     inflationSeries,
+    usCpiSeries,
   ] = await Promise.all([
     supabase
       .from("platforms")
@@ -65,6 +66,7 @@ export default async function PatrimonyPage() {
       .eq("user_id", user!.id),
     getDolarBlueHistory(),
     getMonthlyInflation(120),
+    getUsCpiIndex(),
   ]);
 
   const exchangeRates: ExchangeRates = {
@@ -146,11 +148,36 @@ export default async function PatrimonyPage() {
     })),
   ];
 
+  // Net worth as of today for the month still open — the same figure the
+  // dashboard headline shows: the last close revalued at current rates, plus
+  // this month's movements. Unlike the alternatives this counts *every* flow,
+  // investment returns included, because it is real patrimony rather than a
+  // counterfactual.
+  const openMonth = new Date().toISOString().slice(0, 7);
+  const lastCloseItems = snapshotsWithItems[0]?.items ?? [];
+  const monthNet =
+    (rawIncomes ?? [])
+      .filter((row) => (row.date as string).slice(0, 7) === openMonth)
+      .reduce((sum, row) => sum + flowToArs(row), 0) -
+    (rawExpenses ?? [])
+      .filter((row) => (row.date as string).slice(0, 7) === openMonth)
+      .reduce((sum, row) => sum + flowToArs(row), 0);
+
+  const estimatedCurrentArs =
+    lastCloseItems.length > 0
+      ? lastCloseItems.reduce(
+          (sum, item) => sum + convertToArs(item.amount, item.currency, exchangeRates),
+          0
+        ) + monthNet
+      : null;
+
   const timeline = buildTimeline({
     snapshots: chartData.map((s) => ({ date: s.date, totalArs: s.total_ars })),
     flows,
     blueSeries,
     inflationSeries,
+    usCpiSeries,
+    estimatedCurrentArs,
   });
 
   // Breakdown data from latest snapshot

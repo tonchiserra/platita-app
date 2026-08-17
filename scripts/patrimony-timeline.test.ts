@@ -120,5 +120,31 @@ section("cruce de año");
     out.map((p) => p.month).join(","));
 }
 
+section("índice de precios de Estados Unidos");
+{
+  const out = buildTimeline({
+    ...base,
+    usCpiSeries: [
+      { month: "2026-01", index: 325.252 },
+      // February deliberately absent: the BLS does withhold months.
+      { month: "2026-03", index: 330.213 },
+    ],
+  });
+  check("each month picks up its own index", out[0].usCpiIndex === 325.252);
+  check("a withheld month simply has none", out[1].usCpiIndex === undefined);
+  check("the month after it still gets its own", out[2].usCpiIndex === 330.213);
+}
+
+section("el índice de EEUU es opcional");
+{
+  const out = buildTimeline(base);
+  check("omitting the series leaves every index undefined",
+    out.every((p) => p.usCpiIndex === undefined));
+  const nulled = buildTimeline({ ...base, usCpiSeries: null });
+  check("a null series behaves the same", nulled.every((p) => p.usCpiIndex === undefined));
+  check("and does not disturb the rest of the row",
+    nulled[0].patrimonyArs === 5_000_000 && nulled[0].netSavingsArs === 200_000);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

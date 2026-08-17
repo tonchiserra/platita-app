@@ -1,5 +1,5 @@
 import { blueRateOn, type DolarHistoryPoint } from "@/lib/api/exchange-rates";
-import type { InflationPoint } from "@/lib/api/inflation";
+import type { CpiIndexPoint, InflationPoint } from "@/lib/api/inflation";
 import type { TimelinePoint } from "./patrimony-alternatives";
 
 /** A single income or expense, already converted to ARS. `sign` is +1 or -1. */
@@ -15,6 +15,14 @@ export interface TimelineInput {
   flows: TimelineFlow[];
   blueSeries: DolarHistoryPoint[] | null;
   inflationSeries: InflationPoint[] | null;
+  /** US CPI-U index levels, for discounting the dollarized alternative. */
+  usCpiSeries?: CpiIndexPoint[] | null;
+  /**
+   * Net worth as of today for the month still open: the last close revalued at
+   * current rates plus this month's movements. Used only when that month has no
+   * close of its own, and flagged as an estimate so the chart can say so.
+   */
+  estimatedCurrentArs?: number | null;
 }
 
 function monthOf(date: string): string {
@@ -73,6 +81,11 @@ export function buildTimeline(input: TimelineInput): TimelinePoint[] {
     cpiByMonth.set(monthOf(point.fecha), point.valor);
   }
 
+  const usCpiByMonth = new Map<string, number>();
+  for (const point of input.usCpiSeries ?? []) {
+    usCpiByMonth.set(point.month, point.index);
+  }
+
   // The first row is the anchor every line starts from, so it always needs a
   // patrimony. When no close lands in that month, the most recent earlier one
   // is carried forward — later months keep a null and simply have no point.
@@ -92,16 +105,22 @@ export function buildTimeline(input: TimelineInput): TimelinePoint[] {
     const netSavingsArs = savingsByMonth.get(month) ?? 0;
     const blueRate = blueSeries ? blueRateOn(blueSeries, date) : undefined;
 
+    const recorded = month === first ? anchorArs : patrimonyByMonth.get(month) ?? null;
+    // The open month has no close of its own; fall back to the estimate.
+    const useEstimate =
+      month === last && recorded === null && (input.estimatedCurrentArs ?? null) !== null;
+
     points.push({
       month,
       date,
-      patrimonyArs:
-        month === first ? anchorArs : patrimonyByMonth.get(month) ?? null,
+      patrimonyArs: useEstimate ? input.estimatedCurrentArs! : recorded,
+      patrimonyIsEstimate: useEstimate || undefined,
       netSavingsArs,
       // Dollars bought with that month's savings, at that month's rate.
       netSavingsUsd: blueRate ? netSavingsArs / blueRate : null,
       blueRate,
       inflationPct: cpiByMonth.get(month),
+      usCpiIndex: usCpiByMonth.get(month),
     });
   }
 

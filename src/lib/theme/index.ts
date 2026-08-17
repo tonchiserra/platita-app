@@ -103,6 +103,11 @@ const config = defineConfig({
         bench: {
           inflation: { value: { base: "#b8437f", _dark: "#ee85bb" } },
           mattress: { value: { base: "#96692f", _dark: "#d8a75c" } },
+          // The dollarized line net of US inflation. It runs only ~5 % below the
+          // nominal dollarized line, so the hue that matters most is its
+          // distance from `cur.usd` — indigo against that teal, and clear of
+          // the magenta and ochre already on the chart.
+          usdInflation: { value: { base: "#6244b5", _dark: "#a992f0" } },
         },
         // Denominational palette: colour encodes the currency, not decoration.
         cur: {
