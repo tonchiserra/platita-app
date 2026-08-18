@@ -2,6 +2,7 @@ import { VStack, Heading } from "@chakra-ui/react";
 import { createClient, getUser } from "@/lib/supabase/server";
 import { PlatformManager } from "@/components/settings/PlatformManager";
 import { CategoryManager } from "@/components/settings/CategoryManager";
+import { DataTransfer } from "@/components/settings/DataTransfer";
 
 export default async function SettingsPage() {
   const [user, supabase] = await Promise.all([getUser(), createClient()]);
@@ -22,6 +23,7 @@ export default async function SettingsPage() {
       </Heading>
       <PlatformManager platforms={platforms ?? []} />
       <CategoryManager categories={categories ?? []} />
+      <DataTransfer />
     </VStack>
   );
 }

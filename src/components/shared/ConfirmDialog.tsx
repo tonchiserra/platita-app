@@ -20,6 +20,8 @@ interface ConfirmDialogProps {
   onConfirm: () => void;
   title: string;
   description?: string;
+  /** Defaults to "Eliminar"; the styling stays destructive either way. */
+  confirmLabel?: string;
 }
 
 export function ConfirmDialog({
@@ -28,6 +30,7 @@ export function ConfirmDialog({
   onConfirm,
   title,
   description = "Esta acción no se puede deshacer.",
+  confirmLabel = "Eliminar",
 }: ConfirmDialogProps) {
   return (
     <DialogRoot open={open} onOpenChange={(e) => !e.open && onClose()} placement="center">
@@ -67,7 +70,7 @@ export function ConfirmDialog({
                 onClose();
               }}
             >
-              Eliminar
+              {confirmLabel}
             </Button>
           </DialogFooter>
           <DialogCloseTrigger />
