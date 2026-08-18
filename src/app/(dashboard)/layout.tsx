@@ -2,7 +2,6 @@ import { Box, Flex, Text, Link } from "@chakra-ui/react";
 import { redirect } from "next/navigation";
 import { getUser } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/dashboard/Sidebar";
-import { TopBar } from "@/components/dashboard/TopBar";
 import { BottomNav } from "@/components/dashboard/BottomNav";
 import { getDolarBlue } from "@/lib/api/exchange-rates";
 import { getCryptoPrices } from "@/lib/api/crypto-prices";
@@ -39,7 +38,6 @@ export default async function DashboardLayout({
     <Flex minH="100vh" bg="bg.page">
       <Sidebar rates={sidebarRates} />
       <Box ml={{ base: "0", md: "248px" }} flex="1" minW="0">
-        <TopBar userEmail={user.email} />
         <Box as="main" p={{ base: "4", md: "6" }} pb={{ base: "24", md: "6" }}>
           {children}
         </Box>
