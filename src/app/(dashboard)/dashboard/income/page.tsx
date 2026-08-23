@@ -5,6 +5,8 @@ import { IncomeForm } from "@/components/income/IncomeForm";
 import { IncomeList } from "@/components/income/IncomeList";
 import { LazySection } from "@/components/shared/LazySection";
 import { getDolarBlue } from "@/lib/api/exchange-rates";
+import { tradeIncomes } from "@/lib/utils/trading";
+import type { IncomeListRow } from "@/components/income/IncomeList";
 
 const IncomeSourceChart = dynamic(() =>
   import("@/components/income/IncomeSourceChart").then((m) => m.IncomeSourceChart)
@@ -25,22 +27,38 @@ function formatMonthLabel(key: string) {
 export default async function IncomePage() {
   const [user, supabase] = await Promise.all([getUser(), createClient()]);
 
-  const [{ data: platforms }, { data: incomes }, dolarBlue] = await Promise.all([
-    supabase
-      .from("platforms")
-      .select("*")
-      .eq("user_id", user!.id)
-      .eq("is_active", true)
-      .order("name"),
-    supabase
-      .from("incomes")
-      .select("*, platform:platforms(*)")
-      .eq("user_id", user!.id)
-      .order("date", { ascending: false }),
-    getDolarBlue(),
-  ]);
+  const [{ data: platforms }, { data: incomes }, { data: tradeRows }, dolarBlue] =
+    await Promise.all([
+      supabase
+        .from("platforms")
+        .select("*")
+        .eq("user_id", user!.id)
+        .eq("is_active", true)
+        .order("name"),
+      supabase
+        .from("incomes")
+        .select("*, platform:platforms(*)")
+        .eq("user_id", user!.id)
+        .order("date", { ascending: false }),
+      supabase
+        .from("trades")
+        .select("date, asset, direction, pnl_usd, leverage, notes, platform_id")
+        .eq("user_id", user!.id),
+      getDolarBlue(),
+    ]);
 
-  const allIncomes = incomes ?? [];
+  // Winning trades show up here as rows the list cannot delete — they live in
+  // the trade book. Without them the month totals would not match the charts
+  // above, which do count them.
+  const platformById = new Map((platforms ?? []).map((p) => [p.id, p]));
+  const derived: IncomeListRow[] = tradeIncomes(tradeRows ?? []).map((row) => ({
+    ...row,
+    platform: row.platform_id ? platformById.get(row.platform_id) ?? null : null,
+  }));
+
+  const allIncomes: IncomeListRow[] = [...(incomes ?? []), ...derived].sort((a, b) =>
+    b.date.localeCompare(a.date)
+  );
 
   const usdRate = dolarBlue?.venta ?? 0;
   const toArs = (row: { amount: number; currency: string }) => {

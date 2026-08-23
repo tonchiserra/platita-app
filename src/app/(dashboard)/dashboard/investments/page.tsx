@@ -1,5 +1,5 @@
 import dynamic from "next/dynamic";
-import { VStack, Heading } from "@chakra-ui/react";
+import { VStack } from "@chakra-ui/react";
 import { createClient, getUser } from "@/lib/supabase/server";
 import { InvestmentForm } from "@/components/investments/InvestmentForm";
 import { InvestmentList } from "@/components/investments/InvestmentList";
@@ -81,9 +81,6 @@ export default async function InvestmentsPage() {
 
   return (
     <VStack gap="6" align="stretch">
-      <Heading size="lg" color="fg.heading">
-        Inversiones
-      </Heading>
       <InvestmentForm platforms={platforms ?? []} />
       {(investments ?? []).length > 0 && (
         <LazySection minHeight="300px">

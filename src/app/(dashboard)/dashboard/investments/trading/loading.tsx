@@ -12,14 +12,13 @@ function Skeleton({ h = "120px" }: { h?: string }) {
   );
 }
 
-// The heading and the tab bar come from the layout, so they stay put while this
-// renders — only the page's own blocks need placeholders.
-export default function InvestmentsLoading() {
+export default function TradingLoading() {
   return (
     <VStack gap="6" align="stretch">
-      <Skeleton h="200px" />
-      <Skeleton h="350px" />
-      <Skeleton h="300px" />
+      <Skeleton h="420px" />
+      <Skeleton h="130px" />
+      <Skeleton h="340px" />
+      <Skeleton h="220px" />
     </VStack>
   );
 }

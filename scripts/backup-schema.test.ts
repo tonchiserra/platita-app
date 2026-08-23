@@ -263,6 +263,48 @@ section("etiquetas en español para tipo de plataforma");
   check("and stored as the key the database uses", out.data?.platforms[0].type === "cash");
 }
 
+section("hoja Trading");
+{
+  const rows = (trades: unknown[][]) =>
+    parseBackupWorkbook(workbook({ platforms: [PLATFORM], trades }));
+
+  const ok = rows([["2026-08-19", "BTC", "long", 420.5, 12.4, 10, "Brubank", "Breakout"]]);
+  check("a winning operation reads", ok.data?.trades.length === 1, JSON.stringify(ok.issues));
+  check("and keeps its sign", ok.data?.trades[0].pnl_usd === 420.5);
+
+  const loss = rows([["2026-08-14", "ETH", "short", -150, -6.8, null, null, null]]);
+  check("a loss keeps its minus", loss.data?.trades[0].pnl_usd === -150, JSON.stringify(loss.issues));
+  check("optional columns become null", loss.data?.trades[0].leverage === null);
+
+  // The Argentine number a person types into the cell, negative.
+  const typed = rows([["2026-08-14", "SOL", "short", "-1.250,75", null, null, null, null]]);
+  check("a negative 1.250,75 parses", typed.data?.trades[0].pnl_usd === -1250.75,
+    JSON.stringify(typed.issues));
+
+  const zero = rows([["2026-08-14", "ETH", "short", 0, null, null, null, null]]);
+  check("zero is rejected", zero.data === null);
+  check("and says to use a minus for a loss",
+    zero.issues.some((i) => i.message.includes("menos")), JSON.stringify(zero.issues));
+
+  const blank = rows([["2026-08-14", "ETH", "short", null, null, null, null, null]]);
+  check("a missing PnL is rejected", blank.data === null);
+
+  const direction = rows([["2026-08-14", "ETH", "largo", 100, null, null, null, null]]);
+  check("an invalid direction is rejected", direction.data === null);
+  const upper = rows([["2026-08-14", "ETH", "Short", 100, null, null, null, null]]);
+  check("case does not matter", upper.data?.trades[0].direction === "short",
+    JSON.stringify(upper.issues));
+
+  const asset = rows([["2026-08-14", "", "short", 100, null, null, null, null]]);
+  check("a missing asset is rejected", asset.data === null);
+
+  const lev = rows([["2026-08-14", "ETH", "short", 100, null, 0, null, null]]);
+  check("zero leverage is rejected", lev.data === null);
+
+  const ghost = rows([["2026-08-14", "ETH", "short", 100, null, null, "Galicia", null]]);
+  check("an unknown platform is rejected, not silently nulled", ghost.data === null);
+}
+
 section("todo lo exportado se puede volver a importar");
 {
   // The round trip the whole design rests on: build a payload, write it as
@@ -275,6 +317,8 @@ section("todo lo exportado se puede volver a importar");
                { date: "2026-08-02", amount: 12, currency: "USD", category: "Subscriptions", description: "", platform: null }],
     incomes: [{ date: "2026-08-05", amount: 500, currency: "USD", source: "Salary", description: "", platform: "Brubank" }],
     investments: [{ date: "2026-08-07", asset: "BTC", asset_type: "crypto", units: 0.01, price_per_unit: 65000, total_amount: 650, currency: "USD", platform: "Lemon", notes: null }],
+    trades: [{ date: "2026-08-19", asset: "BTC", direction: "long", pnl_usd: 420.5, pnl_pct: 12.4, leverage: 10, platform: "Lemon", notes: "Breakout" },
+             { date: "2026-08-14", asset: "ETH", direction: "short", pnl_usd: -150, pnl_pct: -6.8, leverage: null, platform: null, notes: null }],
     snapshots: [{ date: "2026-08-31", total_ars: 17562263.32, notes: null }],
     snapshotItems: [{ date: "2026-08-31", platform: "Brubank", currency: "ARS", amount: 10350995 },
                     { date: "2026-08-31", platform: "Lemon", currency: "USD", amount: 4743.49 }],

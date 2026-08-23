@@ -75,6 +75,30 @@ export interface Investment {
   created_at: string;
 }
 
+export type TradeDirection = "long" | "short";
+
+/**
+ * One closed trading operation.
+ *
+ * `pnl_usd` carries the sign and is always in dollars: profits become income
+ * (see `src/lib/utils/trading.ts`), losses only ever reduce the estimated
+ * patrimony. `asset` is the traded market — BTC, SOL — not a currency the amount
+ * is denominated in.
+ */
+export interface Trade {
+  id: string;
+  user_id: string;
+  date: string;
+  asset: string;
+  direction: TradeDirection;
+  pnl_usd: number;
+  pnl_pct: number | null;
+  leverage: number | null;
+  platform_id: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
 // Exchange rates snapshot (ARS conversions)
 export interface ExchangeRates {
   usdRate: number; // ARS per USD (dolar blue venta)
@@ -107,5 +131,9 @@ export interface IncomeWithPlatform extends Income {
 }
 
 export interface InvestmentWithPlatform extends Investment {
+  platform: Platform | null;
+}
+
+export interface TradeWithPlatform extends Trade {
   platform: Platform | null;
 }

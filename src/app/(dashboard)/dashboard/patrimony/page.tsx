@@ -11,6 +11,7 @@ import { getMonthlyInflation, getUsCpiIndex } from "@/lib/api/inflation";
 import { getCryptoPrices } from "@/lib/api/crypto-prices";
 import { convertToArs } from "@/lib/utils/currency-conversion";
 import { buildTimeline, type TimelineFlow } from "@/lib/utils/patrimony-timeline";
+import { tradeIncomes, tradeLossesUsd } from "@/lib/utils/trading";
 import { RETURN_SOURCES } from "@/lib/constants/sources";
 import { PatrimonyPageClient } from "@/components/patrimony/PatrimonyPageClient";
 import type { ExchangeRates, PatrimonySnapshotFull } from "@/types/database";
@@ -35,7 +36,8 @@ export default async function PatrimonyPage() {
     euroBlue,
     cryptoPrices,
     { data: rawExpenses },
-    { data: rawIncomes },
+    { data: rawManualIncomes },
+    { data: tradeRows },
     blueSeries,
     inflationSeries,
     usCpiSeries,
@@ -64,10 +66,20 @@ export default async function PatrimonyPage() {
       // `source` is needed to leave investment returns out of the alternatives.
       .select("amount, currency, date, source")
       .eq("user_id", user!.id),
+    supabase
+      .from("trades")
+      .select("date, asset, direction, pnl_usd, notes, platform_id")
+      .eq("user_id", user!.id),
     getDolarBlueHistory(),
     getMonthlyInflation(120),
     getUsCpiIndex(),
   ]);
+
+  // Trading profits are income rows like any other, carrying the source that
+  // `RETURN_SOURCES` already excludes from the alternatives — so the filter
+  // below needs no knowledge of trades.
+  const trades = tradeRows ?? [];
+  const rawIncomes = [...(rawManualIncomes ?? []), ...tradeIncomes(trades)];
 
   const exchangeRates: ExchangeRates = {
     usdRate: dolarBlue?.venta ?? 0,
@@ -131,10 +143,15 @@ export default async function PatrimonyPage() {
     return convertToArs(amount, row.currency, exchangeRates);
   };
 
+  // Trading losses are deliberately absent from `flows`. The alternatives ask
+  // "what if this money had just sat there", and money sitting in a mattress is
+  // never liquidated — so a loss cannot be charged to the do-nothing scenario,
+  // exactly as its matching profit cannot be credited to it. The symmetry is
+  // load-bearing: charging one side and not the other would bend every line.
   const flows: TimelineFlow[] = [
     // Returns on money you already had are income, but not *new* money, so the
     // alternatives must not be credited with them. See RETURN_SOURCES.
-    ...(rawIncomes ?? [])
+    ...rawIncomes
       .filter((row) => !RETURN_SOURCES.has(row.source as string))
       .map((row) => ({
         date: row.date as string,
@@ -156,12 +173,17 @@ export default async function PatrimonyPage() {
   const openMonth = new Date().toISOString().slice(0, 7);
   const lastCloseItems = snapshotsWithItems[0]?.items ?? [];
   const monthNet =
-    (rawIncomes ?? [])
+    rawIncomes
       .filter((row) => (row.date as string).slice(0, 7) === openMonth)
       .reduce((sum, row) => sum + flowToArs(row), 0) -
     (rawExpenses ?? [])
       .filter((row) => (row.date as string).slice(0, 7) === openMonth)
-      .reduce((sum, row) => sum + flowToArs(row), 0);
+      .reduce((sum, row) => sum + flowToArs(row), 0) -
+    // Not a gasto, so it is in no expense row — but the money did leave a
+    // balance the last close counted, so the estimate has to lose it too.
+    // Converted at today's rate, like the close it is being subtracted from,
+    // rather than at the rate of each operation's own date.
+    convertToArs(tradeLossesUsd(trades, openMonth), "USD", exchangeRates);
 
   const estimatedCurrentArs =
     lastCloseItems.length > 0

@@ -14,6 +14,9 @@ const data: BackupData = {
              { date: "2026-08-02", amount: 12.34, currency: "USD", category: "Subscriptions", description: "", platform: null }],
   incomes: [{ date: "2026-08-05", amount: 500, currency: "USD", source: "Salary", description: "", platform: "Brubank" }],
   investments: [{ date: "2026-08-07", asset: "BTC", asset_type: "crypto", units: 0.01, price_per_unit: 65000, total_amount: 650, currency: "USD", platform: "Lemon", notes: null }],
+  // Both signs, because the sign is the one thing this column has to survive.
+  trades: [{ date: "2026-08-19", asset: "BTC", direction: "long", pnl_usd: 420.5, pnl_pct: 12.4, leverage: 10, platform: "Lemon", notes: "Breakout post-FOMC" },
+           { date: "2026-08-14", asset: "ETH", direction: "short", pnl_usd: -150, pnl_pct: -6.8, leverage: null, platform: null, notes: null }],
   snapshots: [{ date: "2026-08-31", total_ars: 17562263.32, notes: null }],
   snapshotItems: [{ date: "2026-08-31", platform: "Brubank", currency: "ARS", amount: 10350995 },
                   { date: "2026-08-31", platform: "Lemon", currency: "USD", amount: 4743.49 }],
@@ -70,8 +73,13 @@ async function main() {
   ok("la plantilla vacía no tiene errores de estructura", tpl.issues.length === 0, JSON.stringify(tpl.issues));
   ok("y no trae ninguna fila", tpl.data !== null && totalRows(tpl.data) === 0);
   const sheetNames = ((await readXlsxFile("/tmp/plantilla.xlsx")) as never as {sheet:string}[]).map(s => s.sheet);
-  ok("tiene las 7 hojas más Instrucciones", sheetNames.length === 8, sheetNames.join(", "));
+  // Derived from SHEET_ORDER rather than a literal: adding a table has to grow
+  // this count on its own, or the assertion just breaks on the next migration.
+  ok(`tiene las ${SHEET_ORDER.length} hojas más Instrucciones`,
+    sheetNames.length === SHEET_ORDER.length + 1, sheetNames.join(", "));
   ok("la hoja de instrucciones está presente", sheetNames.includes(INSTRUCTIONS_SHEET));
+  ok("y una hoja por tabla, sin faltar ninguna",
+    SHEET_ORDER.every((key) => sheetNames.includes(SHEET[key])), sheetNames.join(", "));
 
   // 3. La plantilla llenada a mano (fechas y números como texto es-AR)
   const filled = (await readXlsxFile("/tmp/plantilla.xlsx")) as never as {sheet:string; data:unknown[][]}[];

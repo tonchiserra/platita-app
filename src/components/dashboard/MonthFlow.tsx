@@ -20,6 +20,10 @@ interface MonthFlowProps {
   expensesChange?: number;
   balanceChange?: number;
   monthLabel: string;
+  /** Trading losses for the month, in ARS. Zero in a month without any. */
+  tradingLossArs?: number;
+  /** The same figure as entered, in USD — the book's own unit. */
+  tradingLossUsd?: number;
 }
 
 function Fig({ label, value, change, invertColor, highlight }: Figure) {
@@ -76,7 +80,10 @@ export function MonthFlow({
   expensesChange,
   balanceChange,
   monthLabel,
+  tradingLossArs = 0,
+  tradingLossUsd = 0,
 }: MonthFlowProps) {
+  const { mask } = useMoneyVisibility();
   const balance = income - expenses;
   const spentPct = income > 0 ? Math.min((expenses / income) * 100, 100) : 0;
   const keptPct = 100 - spentPct;
@@ -121,6 +128,43 @@ export function MonthFlow({
             </Flex>
           </Flex>
         </>
+      )}
+
+      {/*
+        A trading loss is not a gasto, so it is absent from "Salió" and from the
+        bar — which means "Te quedó" no longer explains the whole move in net
+        worth, and the gap is exactly this. Naming it beats leaving a silent
+        hole. It is a footnote rather than a fourth figure because a loss is not
+        a flow of the same rank as income and spending.
+      */}
+      {tradingLossArs > 0 && (
+        <Flex
+          gap="2.5"
+          align="flex-start"
+          borderTop="1px solid"
+          borderColor="border.card"
+          pt="3.5"
+        >
+          <Box as="span" color="trend.down" flexShrink={0} mt="0.5" display="inline-flex">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 5v14" />
+              <path d="m19 12-7 7-7-7" />
+            </svg>
+          </Box>
+          <Text fontSize="xs" color="fg.body" lineHeight="1.6">
+            Además,{" "}
+            <Text as="span" fontFamily="mono" color="trend.down" fontWeight="medium" data-num>
+              {mask(formatCurrency(tradingLossArs))}
+            </Text>{" "}
+            de pérdidas de trading{" "}
+            {tradingLossUsd > 0 && (
+              <Text as="span" fontFamily="mono" color="fg.muted" data-num>
+                ({mask(formatCurrency(tradingLossUsd, "USD"))})
+              </Text>
+            )}
+            . No cuentan como gasto, pero bajan tu patrimonio estimado.
+          </Text>
+        </Flex>
       )}
     </Box>
   );

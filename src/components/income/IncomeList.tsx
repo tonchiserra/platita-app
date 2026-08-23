@@ -2,13 +2,33 @@
 
 import { useMemo, useState } from "react";
 import { Box, Collapsible, Flex, Text, Button } from "@chakra-ui/react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { formatCurrency, formatDate, formatPercentage } from "@/lib/utils/format";
-import type { IncomeWithPlatform } from "@/types/database";
+import type { Platform } from "@/types/database";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { useMoneyVisibility } from "@/lib/context/money-visibility";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+
+/**
+ * What this list needs from a row, which is less than a full `Income`.
+ *
+ * Stated as its own type because not every row here has a row in the `incomes`
+ * table: a winning trade is derived from the trade book at render time, so it is
+ * shown but cannot be deleted from here.
+ */
+export interface IncomeListRow {
+  id: string;
+  amount: number;
+  currency: string;
+  source: string;
+  description: string;
+  date: string;
+  platform: Pick<Platform, "name"> | null;
+  /** Set only on rows derived from the trading book. */
+  trade?: { asset: string; direction: string; leverage: number | null };
+}
 
 interface MonthGroup {
   key: string;
@@ -16,11 +36,11 @@ interface MonthGroup {
   totalArs: number;
   totalUsd: number;
   change?: number;
-  items: IncomeWithPlatform[];
+  items: IncomeListRow[];
 }
 
-function groupByMonth(incomes: IncomeWithPlatform[], usdRate: number): MonthGroup[] {
-  const map = new Map<string, IncomeWithPlatform[]>();
+function groupByMonth(incomes: IncomeListRow[], usdRate: number): MonthGroup[] {
+  const map = new Map<string, IncomeListRow[]>();
 
   for (const inc of incomes) {
     const key = inc.date.slice(0, 7);
@@ -53,7 +73,7 @@ function groupByMonth(incomes: IncomeWithPlatform[], usdRate: number): MonthGrou
 }
 
 interface IncomeListProps {
-  incomes: IncomeWithPlatform[];
+  incomes: IncomeListRow[];
   usdRate: number;
 }
 
@@ -142,21 +162,44 @@ export function IncomeList({ incomes, usdRate }: IncomeListProps) {
                   py="4"
                   borderTop="1px solid"
                   borderColor="border.card"
+                  // Derived rows sit on the recessed ground: they are shown here
+                  // but they are not editable here.
+                  bg={income.trade ? "bg.sunk" : undefined}
                   _hover={{ bg: "bg.hover" }}
                 >
-                  <Flex align="center" gap="3" flex="1">
-                    <Text fontSize="xl">💵</Text>
-                    <Box>
+                  <Flex align="center" gap="3" flex="1" minW="0">
+                    {income.trade ? (
+                      <Box bg="brand.100" borderRadius="lg" px="2.5" py="1" minW="fit-content">
+                        <Text fontSize="sm" fontWeight="bold" color="brand.700">
+                          {income.trade.asset}
+                        </Text>
+                      </Box>
+                    ) : (
+                      <Text fontSize="xl">💵</Text>
+                    )}
+                    <Box minW="0">
                       <Text fontSize="sm" fontWeight="medium" color="fg.heading">
                         {income.description || income.source}
                       </Text>
-                      <Flex gap="2" align="center">
+                      <Flex gap="2" align="center" wrap="wrap">
                         <Text fontSize="xs" color="fg.muted">
                           {formatDate(income.date)} · {income.source}
                         </Text>
                         {income.platform && (
                           <Text fontSize="xs" color="fg.muted">
                             · {income.platform.name}
+                          </Text>
+                        )}
+                        {income.trade && (
+                          <Text
+                            fontSize="2xs"
+                            color="fg.muted"
+                            border="1px solid"
+                            borderColor="border.input"
+                            borderRadius="sm"
+                            px="1.5"
+                          >
+                            del libro de trading
                           </Text>
                         )}
                       </Flex>
@@ -167,16 +210,33 @@ export function IncomeList({ incomes, usdRate }: IncomeListProps) {
                     <Text fontSize="sm" fontWeight="semibold" color="trend.up" fontFamily="mono" data-num>
                       +{mask(formatCurrency(Number(income.amount), income.currency as any))}
                     </Text>
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      color="fg.muted"
-                      _hover={{ color: "trend.down" }}
-                      aria-label="Eliminar"
-                      onClick={() => setDeleteId(income.id)}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
-                    </Button>
+                    {income.trade ? (
+                      <Button
+                        asChild
+                        size="xs"
+                        variant="ghost"
+                        color="fg.muted"
+                        _hover={{ color: "fg.heading" }}
+                      >
+                        <Link
+                          href="/dashboard/investments/trading"
+                          aria-label="Ver en el libro de trading"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17 17 7" /><path d="M7 7h10v10" /></svg>
+                        </Link>
+                      </Button>
+                    ) : (
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        color="fg.muted"
+                        _hover={{ color: "trend.down" }}
+                        aria-label="Eliminar"
+                        onClick={() => setDeleteId(income.id)}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                      </Button>
+                    )}
                   </Flex>
                 </Flex>
               ))}

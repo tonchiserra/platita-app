@@ -24,3 +24,13 @@ export type IncomeSource = (typeof INCOME_SOURCES)[number];
 export const RETURN_SOURCES: ReadonlySet<string> = new Set<IncomeSource>([
   "Investment Returns",
 ]);
+
+/**
+ * The source a trading profit is credited to.
+ *
+ * It is deliberately a member of `RETURN_SOURCES` above: that is the whole
+ * mechanism by which trading profits stay out of the alternatives chart without
+ * that chart knowing trades exist. Moving it out of that set silently starts
+ * crediting the do-nothing scenarios with your trading.
+ */
+export const TRADE_INCOME_SOURCE: IncomeSource = "Investment Returns";

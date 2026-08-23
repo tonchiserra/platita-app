@@ -12,6 +12,7 @@ import type {
   Investment,
   PatrimonySnapshot,
   Platform,
+  Trade,
 } from "@/types/database";
 import {
   COLUMNS,
@@ -32,7 +33,8 @@ import {
 } from "@/lib/utils/backup-schema";
 
 /**
- * "That table does not exist" — the case of migration 002 not being applied yet.
+ * "That table does not exist" — the case of a migration not being applied yet,
+ * which is true of `expense_categories` (002) and `trades` (003).
  *
  * Two codes, because they come from different layers: PostgREST answers
  * `PGRST205` when the table is absent from its schema cache, which is what the
@@ -47,6 +49,7 @@ const SHEET_LABEL: Record<SheetKey, { one: string; many: string }> = {
   expenses: { one: "gasto", many: "gastos" },
   incomes: { one: "ingreso", many: "ingresos" },
   investments: { one: "inversión", many: "inversiones" },
+  trades: { one: "operación", many: "operaciones" },
   snapshots: { one: "cierre de patrimonio", many: "cierres de patrimonio" },
   snapshotItems: { one: "fila de detalle", many: "filas de detalle" },
 };
@@ -143,6 +146,7 @@ function fetchAll<T>(
 async function fetchBackup(): Promise<{
   data: BackupData;
   missingCategories: boolean;
+  missingTrades: boolean;
   droppedItems: number;
 }> {
   const supabase = createClient();
@@ -156,7 +160,7 @@ async function fetchBackup(): Promise<{
   // nested select is subject to its own row cap, and losing breakdown rows
   // silently is the same failure this function exists to prevent. Its RLS
   // already scopes it to rows whose parent close belongs to this user.
-  const [platforms, categories, expenses, incomes, investments, snapshots, items] =
+  const [platforms, categories, expenses, incomes, investments, trades, snapshots, items] =
     await Promise.all([
       fetchAll<Platform>("platforms", "*", "name", { column: "user_id", value: id }),
       fetchAll<ExpenseCategoryRow>(
@@ -169,6 +173,8 @@ async function fetchBackup(): Promise<{
       fetchAll<Expense>("expenses", "*", "date", { column: "user_id", value: id }),
       fetchAll<Income>("incomes", "*", "date", { column: "user_id", value: id }),
       fetchAll<Investment>("investments", "*", "date", { column: "user_id", value: id }),
+      // Tolerated like the categories above: migration 003 may not be applied.
+      fetchAll<Trade>("trades", "*", "date", { column: "user_id", value: id }, true),
       fetchAll<PatrimonySnapshot>("patrimony_snapshots", "*", "date", {
         column: "user_id",
         value: id,
@@ -222,6 +228,16 @@ async function fetchBackup(): Promise<{
     platform: row.platform_id ? nameById.get(row.platform_id) ?? null : null,
     notes: row.notes ?? null,
   }));
+  data.trades = trades.rows.map((row) => ({
+    date: row.date,
+    asset: row.asset,
+    direction: row.direction,
+    pnl_usd: Number(row.pnl_usd),
+    pnl_pct: row.pnl_pct === null ? null : Number(row.pnl_pct),
+    leverage: row.leverage === null ? null : Number(row.leverage),
+    platform: row.platform_id ? nameById.get(row.platform_id) ?? null : null,
+    notes: row.notes ?? null,
+  }));
 
   const dateBySnapshotId = new Map<string, string>();
   for (const snapshot of snapshots.rows) {
@@ -248,7 +264,12 @@ async function fetchBackup(): Promise<{
   }
   const droppedItems = items.rows.length - data.snapshotItems.length;
 
-  return { data, missingCategories: categories.missing, droppedItems };
+  return {
+    data,
+    missingCategories: categories.missing,
+    missingTrades: trades.missing,
+    droppedItems,
+  };
 }
 
 export function DataTransfer() {
@@ -272,7 +293,7 @@ export function DataTransfer() {
     reset();
     setBusy("export");
     try {
-      const { data, missingCategories, droppedItems } = await fetchBackup();
+      const { data, missingCategories, missingTrades, droppedItems } = await fetchBackup();
       await downloadWorkbook(data, `platita-datos-${today()}.xlsx`, false);
       const counts = countRows(data);
       setNotice(
@@ -283,6 +304,9 @@ export function DataTransfer() {
           "." +
           (missingCategories
             ? " Tus categorías no se incluyeron porque la migración 002 todavía no está aplicada."
+            : "") +
+          (missingTrades
+            ? " Tu libro de trading no se incluyó porque la migración 003 todavía no está aplicada."
             : "") +
           (droppedItems > 0
             ? ` Se omitieron ${droppedItems} filas de detalle cuyo cierre o plataforma ya no existe.`
@@ -378,6 +402,7 @@ export function DataTransfer() {
         "expenses",
         "incomes",
         "investments",
+        "trades",
         "expense_categories",
         "platforms",
       ] as const) {
@@ -442,6 +467,21 @@ export function DataTransfer() {
           }))
         );
         if (investmentError) fail("Insertando inversiones", investmentError.message);
+      }
+
+      if (pending.trades.length > 0) {
+        const { error: tradeError } = await supabase.from("trades").insert(
+          pending.trades.map(({ platform, ...row }) => ({
+            ...row,
+            user_id: id,
+            platform_id: platformId(platform),
+          }))
+        );
+        // Same tolerance as the categories: without migration 003 there is no
+        // table to put these in, and that must not abort the whole restore.
+        if (tradeError && !MISSING_TABLE_CODES.includes(tradeError.code)) {
+          fail("Insertando operaciones", tradeError.message);
+        }
       }
 
       if (pending.snapshots.length > 0) {

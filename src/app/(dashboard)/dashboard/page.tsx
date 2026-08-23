@@ -14,6 +14,7 @@ import { AlertsPanel } from "@/components/dashboard/AlertsPanel";
 import { getCryptoPrices } from "@/lib/api/crypto-prices";
 import { convertToArs } from "@/lib/utils/currency-conversion";
 import { formatCurrency, formatTimeOfDay } from "@/lib/utils/format";
+import { tradeIncomes, tradeLossesUsd } from "@/lib/utils/trading";
 import type { ExchangeRates as Rates } from "@/types/database";
 
 const ExpenseCategoryChart = dynamic(() =>
@@ -71,6 +72,7 @@ export default async function DashboardPage() {
     { data: recentIncomes },
     { data: platforms },
     { data: categoryRows },
+    { data: tradeRows },
     inflationSeries,
   ] = await Promise.all([
     supabase
@@ -109,6 +111,13 @@ export default async function DashboardPage() {
       .select("*")
       .eq("user_id", user!.id)
       .order("sort_order"),
+    // The trading book. Its profits become income rows below; its losses are
+    // never expenses and only ever reduce the estimate.
+    supabase
+      .from("trades")
+      .select("date, asset, direction, pnl_usd, leverage, notes, platform_id")
+      .eq("user_id", user!.id)
+      .gte("date", twelveAgoStr),
     getMonthlyInflation(),
   ]);
 
@@ -119,7 +128,18 @@ export default async function DashboardPage() {
   const platformMap = Object.fromEntries((platforms ?? []).map((p: any) => [p.id, p.name]));
 
   const allExpenses = recentExpenses ?? [];
-  const allIncomes = recentIncomes ?? [];
+
+  // Trading profits are income, so they join the income rows before any
+  // aggregation happens — which is why every chart below picks them up without
+  // knowing trades exist. A null `tradeRows` is migration 003 not applied yet.
+  const trades = tradeRows ?? [];
+  const allIncomes = [...(recentIncomes ?? []), ...tradeIncomes(trades)].sort((a, b) =>
+    (b.date as string).localeCompare(a.date as string)
+  );
+
+  // Losses are not expenses and never enter one. They are subtracted from the
+  // patrimony estimate alone, further down.
+  const curLossesUsd = tradeLossesUsd(trades, curMonth);
 
   // Exchange rates (needed for multi-currency conversion)
   const usdRate = dolarBlue?.venta ?? 0;
@@ -164,6 +184,11 @@ export default async function DashboardPage() {
       ? ((Number(latest.total_ars) - Number(previous.total_ars)) / Number(previous.total_ars)) * 100
       : undefined;
 
+  // A trading loss is real money gone from a balance the last close counted, so
+  // it belongs in the estimate — even though it is not a gasto and appears in no
+  // expense figure above.
+  const curLossesArs = convertToArs(curLossesUsd, "USD", fx);
+
   // Estimated patrimony
   const latestItems = latestWithItems?.patrimony_snapshot_items ?? [];
   let estimatedArs: number | null = null;
@@ -171,7 +196,7 @@ export default async function DashboardPage() {
     estimatedArs = latestItems.reduce((sum, item) => {
       return sum + convertToArs(Number((item as any).amount), (item as any).currency, fx);
     }, 0);
-    estimatedArs += totalIncomes - totalExpenses;
+    estimatedArs += totalIncomes - totalExpenses - curLossesArs;
   }
 
   // === The equation behind the estimate ===
@@ -211,6 +236,9 @@ export default async function DashboardPage() {
         chain: [{ value: fmt(ethUsd, 0), unit: "USD" }, { value: fmt(usdRate) }],
       });
 
+    // `ingresos` already includes the trading profits, so this line matches
+    // MonthFlow's "Entró" exactly. The losses get a line of their own because
+    // they are not a gasto — nothing was bought.
     if (totalIncomes > 0)
       add({ amount: fmt(totalIncomes, 0), note: `ingresos de ${monthName}` });
     if (totalExpenses > 0)
@@ -218,6 +246,12 @@ export default async function DashboardPage() {
         op: "−",
         amount: fmt(totalExpenses, 0),
         note: `gastos de ${monthName}`,
+      });
+    if (curLossesArs > 0)
+      equationTerms.push({
+        op: "−",
+        amount: fmt(curLossesArs, 0),
+        note: `pérdidas de trading de ${monthName}`,
       });
   }
 
@@ -451,6 +485,8 @@ export default async function DashboardPage() {
         expensesChange={expensesChange}
         balanceChange={balanceChange}
         monthLabel={monthName}
+        tradingLossArs={curLossesArs}
+        tradingLossUsd={curLossesUsd}
       />
       <LazySection minHeight="300px">
         <SimpleGrid columns={{ base: 1, md: 2 }} gap="4">

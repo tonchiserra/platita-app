@@ -18,6 +18,7 @@ export const SHEET = {
   expenses: "Gastos",
   incomes: "Ingresos",
   investments: "Inversiones",
+  trades: "Trading",
   snapshots: "Patrimonio",
   snapshotItems: "Patrimonio detalle",
 } as const;
@@ -77,6 +78,18 @@ export const COLUMNS: Record<SheetKey, ColumnDef[]> = {
     { key: "platform", header: "plataforma", type: "text", width: 22, optional: true },
     { key: "notes", header: "notas", type: "text", width: 30, optional: true },
   ],
+  trades: [
+    { key: "date", header: "fecha", type: "date", width: 14 },
+    { key: "asset", header: "moneda", type: "text", width: 12 },
+    { key: "direction", header: "tipo", type: "text", width: 10 },
+    // Signed. A minus here is the difference between an income and a loss, so
+    // the sheet carries it rather than deriving it from a separate column.
+    { key: "pnl_usd", header: "PnL USD", type: "number", width: 14 },
+    { key: "pnl_pct", header: "PnL %", type: "number", width: 10, optional: true },
+    { key: "leverage", header: "apalancamiento", type: "number", width: 16, optional: true },
+    { key: "platform", header: "plataforma", type: "text", width: 22, optional: true },
+    { key: "notes", header: "notas", type: "text", width: 30, optional: true },
+  ],
   snapshots: [
     { key: "date", header: "fecha", type: "date", width: 14 },
     { key: "total_ars", header: "total ARS", type: "number", width: 18 },
@@ -96,6 +109,7 @@ export const SHEET_ORDER: SheetKey[] = [
   "expenses",
   "incomes",
   "investments",
+  "trades",
   "snapshots",
   "snapshotItems",
 ];
@@ -144,6 +158,17 @@ export interface BackupInvestment {
   platform: string | null;
   notes: string | null;
 }
+export interface BackupTrade {
+  date: string;
+  asset: string;
+  direction: string;
+  /** Signed: negative is a loss. */
+  pnl_usd: number;
+  pnl_pct: number | null;
+  leverage: number | null;
+  platform: string | null;
+  notes: string | null;
+}
 export interface BackupSnapshot {
   date: string;
   total_ars: number;
@@ -162,6 +187,7 @@ export interface BackupData {
   expenses: BackupExpense[];
   incomes: BackupIncome[];
   investments: BackupInvestment[];
+  trades: BackupTrade[];
   snapshots: BackupSnapshot[];
   snapshotItems: BackupSnapshotItem[];
 }
@@ -173,6 +199,7 @@ export function emptyBackup(): BackupData {
     expenses: [],
     incomes: [],
     investments: [],
+    trades: [],
     snapshots: [],
     snapshotItems: [],
   };
@@ -185,6 +212,7 @@ export function countRows(data: BackupData): Record<SheetKey, number> {
     expenses: data.expenses.length,
     incomes: data.incomes.length,
     investments: data.investments.length,
+    trades: data.trades.length,
     snapshots: data.snapshots.length,
     snapshotItems: data.snapshotItems.length,
   };
@@ -255,11 +283,27 @@ export const INSTRUCTIONS: string[][] = [
   ["", "Montos: solo números, mayores a cero en gastos e ingresos."],
   ["", "En Inversiones, «unidades» se calcula solo si la dejás vacía (total ÷ precio por unidad)."],
   [],
+  ["Hoja Trading"],
+  [
+    "",
+    "«PnL USD» va con signo: positivo es ganancia, negativo es pérdida. Cero no se acepta.",
+  ],
+  [
+    "",
+    "Las ganancias se cuentan como ingreso solas, con fuente «Investment Returns». No las cargues también en la hoja Ingresos o van a contarse dos veces.",
+  ],
+  [
+    "",
+    "Las pérdidas no son gastos. Sólo bajan el patrimonio estimado, así que no van en la hoja Gastos.",
+  ],
+  ["", "«moneda» es el activo que operaste (BTC, ETH, SOL), no la moneda del PnL."],
+  [],
   ["Valores válidos"],
   ["", "Monedas", CURRENCIES.join(", ")],
   ["", "Tipo de plataforma", PLATFORM_TYPES.join(", ")],
   ["", "", PLATFORM_TYPES.map((type) => PLATFORM_TYPE_LABELS[type]).join(", ")],
   ["", "Tipo de activo", ASSET_TYPES.join(", ")],
+  ["", "Tipo de operación", "long, short"],
   ["", "Categoría y fuente", "Texto libre. Usá los mismos nombres que ves en la app."],
 ];
 
@@ -603,6 +647,52 @@ export function parseBackupWorkbook(sheets: RawSheet[]): ParseResult {
       currency,
       platform,
       notes: normalise(cell("investments", row, "notas")) || null,
+    });
+  }
+
+  // --- Trading book ------------------------------------------------------
+  for (const { row, line } of body("trades")) {
+    const date = readDate(cell("trades", row, "fecha"));
+    if (!date) {
+      add("trades", line, "Fecha inválida. Usá 2026-08-01.");
+      continue;
+    }
+    const asset = normalise(cell("trades", row, "moneda"));
+    if (!asset) {
+      add("trades", line, "La moneda operada es obligatoria.");
+      continue;
+    }
+    const direction = normalise(cell("trades", row, "tipo")).toLowerCase();
+    if (direction !== "long" && direction !== "short") {
+      add("trades", line, `Tipo «${direction}» inválido. Válidos: long, short.`);
+      continue;
+    }
+    const pnl = readNumber(cell("trades", row, "PnL USD"));
+    if (pnl === null) {
+      add("trades", line, "«PnL USD» es obligatorio.");
+      continue;
+    }
+    // The sign is the whole point of the column, and zero has no side.
+    if (pnl === 0) {
+      add("trades", line, "El PnL tiene que ser distinto de cero. Usá un menos para una pérdida.");
+      continue;
+    }
+    const leverage = readNumber(cell("trades", row, "apalancamiento"));
+    if (leverage !== null && leverage <= 0) {
+      add("trades", line, "El apalancamiento tiene que ser mayor a cero.");
+      continue;
+    }
+    const platform = platformRef("trades", row, line, false);
+    if (platform === undefined) continue;
+    data.trades.push({
+      date,
+      asset,
+      direction,
+      pnl_usd: pnl,
+      pnl_pct: readNumber(cell("trades", row, "PnL %")),
+      leverage,
+      platform,
+      notes: normalise(cell("trades", row, "notas")) || null,
     });
   }
 
