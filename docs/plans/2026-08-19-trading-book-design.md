@@ -342,6 +342,32 @@ que ya está tomada en `AlternativesChart`, cuyo eje tampoco arranca en cero.
 
 Va con `next/dynamic` + `LazySection`, como todo Recharts en la app.
 
+### Dos trampas que costaron un gráfico en blanco
+
+La primera versión no se veía, por dos razones que conviene dejar escritas:
+
+1. **Altura explícita en px, no `flex="1"` + `height="100%"`.** Esta tarjeta es
+   hija directa de un `VStack` y no tiene altura propia, así que un contenedor
+   con `flex-basis: 0` al que `ResponsiveContainer` le pide el 100 % mide cero y
+   el gráfico sale vacío. `ExpenseTrendChart` se salva porque vive en un
+   `SimpleGrid` con `h="full"`. El precedente correcto para un gráfico suelto es
+   `CashflowChart`, que fija su plot en píxeles — y ahora este también.
+2. **Recharts toma un `radius` por serie, no por celda.** Una única serie con
+   signo redondea la punta *de arriba* de una barra que crece hacia abajo. Van
+   dos series, `up` y `down`, con `stackId` compartido y `null` en la que no
+   corresponde: queda una sola barra por mes, centrada, y cada dirección con su
+   propio redondeo.
+
+Y una trampa de verificación, no de código: un screenshot de página completa
+redimensiona el viewport, `ResponsiveContainer` lo detecta y **reinicia la
+animación de las barras**, así que la captura sale con las barras en altura cero
+y parece un gráfico roto. Para mirar este gráfico hay que capturar el viewport,
+no la página entera.
+
+Se dibuja desde el primer mes, no desde el segundo. Una sola barra es flaca
+—acotada con `maxBarSize` para que no cruce la tarjeta— pero un gráfico que
+directamente no está se lee como una función que no funciona.
+
 ## Fuera de alcance
 
 - Operaciones abiertas, precio de entrada y salida, tamaño de posición,

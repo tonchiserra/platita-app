@@ -67,8 +67,10 @@ export default async function TradingPage() {
       {book.length > 0 && (
         <TradeStats month={monthStats} allTime={allTimeStats} monthLabel={monthLabel} />
       )}
-      {chartData.length > 1 && (
-        <LazySection minHeight="340px">
+      {/* From the first month, not the second: a one-bar chart is thin, but a
+          chart that silently is not there reads as broken. */}
+      {chartData.length > 0 && (
+        <LazySection minHeight="380px">
           <TradePnlChart data={chartData} total={allTimeStats.net} />
         </LazySection>
       )}

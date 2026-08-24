@@ -5,7 +5,6 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
-  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -22,6 +21,26 @@ export interface TradePnlPoint {
   net: number;
   wins: number;
   losses: number;
+}
+
+/**
+ * An explicit pixel height, not `flex="1"` + `height="100%"`.
+ *
+ * This card is a direct child of a `VStack` and has no resolved height of its
+ * own, so a `flex-basis: 0` plot box asking `ResponsiveContainer` for 100 % of
+ * it measures zero and the chart renders blank. `CashflowChart` — the only other
+ * full-width chart standing alone in a stack — pins its plot the same way.
+ */
+const PLOT_HEIGHT = 260;
+
+/** So a book with a single month does not draw one bar across the whole card. */
+const MAX_BAR = 56;
+
+function compact(value: number): string {
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "−" : "";
+  if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(1).replace(".", ",")}K`;
+  return `${sign}${Math.round(abs)}`;
 }
 
 interface TooltipProps {
@@ -69,6 +88,16 @@ function PnlTooltip({ active, payload, label, mask }: TooltipProps) {
 export function TradePnlChart({ data, total }: { data: TradePnlPoint[]; total: number }) {
   const { mask } = useMoneyVisibility();
 
+  // Recharts takes one `radius` per series, so a single signed series would
+  // round the *top* of a bar that grows downward. Two series sharing a stackId
+  // give each direction its own rounding while keeping one bar per month,
+  // centred in its category.
+  const shaped = data.map((point) => ({
+    ...point,
+    up: point.net > 0 ? point.net : null,
+    down: point.net < 0 ? point.net : null,
+  }));
+
   return (
     <Box
       bg="bg.card"
@@ -88,37 +117,47 @@ export function TradePnlChart({ data, total }: { data: TradePnlPoint[]; total: n
         {data.length === 1 ? "mes" : "meses"}
       </Text>
 
-      <Box flex="1" minH="220px">
+      <Box h={`${PLOT_HEIGHT}px`}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+          <BarChart data={shaped} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} vertical={false} />
             <XAxis
               dataKey="label"
               stroke={CHART.axis}
               fontSize={11}
               tickLine={false}
               axisLine={false}
+              interval={0}
             />
             <YAxis
               stroke={CHART.axis}
               fontSize={11}
+              width={52}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(value: number) =>
-                mask(
-                  Math.abs(value) >= 1_000
-                    ? `${(value / 1_000).toFixed(1)}K`
-                    : String(value)
-                )
-              }
+              tickFormatter={(value: number) => mask(compact(value))}
             />
+            {/* The zero line is the reading: above it is a month that made
+                money, below it one that lost. */}
             <ReferenceLine y={0} stroke={CHART.axis} strokeWidth={1} />
-            <Tooltip content={<PnlTooltip mask={mask} />} cursor={{ fill: "transparent" }} />
-            <Bar dataKey="net" radius={[4, 4, 0, 0]}>
-              {data.map((point) => (
-                <Cell key={point.label} fill={point.net >= 0 ? CHART.up : CHART.down} />
-              ))}
-            </Bar>
+            <Tooltip
+              content={<PnlTooltip mask={mask} />}
+              cursor={{ fill: "var(--chakra-colors-bg-sunk)" }}
+            />
+            <Bar
+              dataKey="up"
+              stackId="pnl"
+              fill={CHART.up}
+              radius={[4, 4, 0, 0]}
+              maxBarSize={MAX_BAR}
+            />
+            <Bar
+              dataKey="down"
+              stackId="pnl"
+              fill={CHART.down}
+              radius={[0, 0, 4, 4]}
+              maxBarSize={MAX_BAR}
+            />
           </BarChart>
         </ResponsiveContainer>
       </Box>
