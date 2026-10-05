@@ -11,6 +11,7 @@ import { getMonthlyInflation, getUsCpiIndex } from "@/lib/api/inflation";
 import { getCryptoPrices } from "@/lib/api/crypto-prices";
 import { convertToArs } from "@/lib/utils/currency-conversion";
 import { buildTimeline, type TimelineFlow } from "@/lib/utils/patrimony-timeline";
+import { flowsSinceClose } from "@/lib/utils/patrimony-estimate";
 import { tradeIncomes, tradeLossesUsd } from "@/lib/utils/trading";
 import { RETURN_SOURCES } from "@/lib/constants/sources";
 import { PatrimonyPageClient } from "@/components/patrimony/PatrimonyPageClient";
@@ -157,23 +158,24 @@ export default async function PatrimonyPage() {
 
   // Net worth as of today for the month still open — the same figure the
   // dashboard headline shows: the last close revalued at current rates, plus
-  // this month's movements. Unlike the alternatives this counts *every* flow,
-  // investment returns included, because it is real patrimony rather than a
-  // counterfactual.
+  // every movement since that close (`flowsSinceClose`). Unlike the
+  // alternatives this counts *every* flow, investment returns included,
+  // because it is real patrimony rather than a counterfactual.
   const openMonth = new Date().toISOString().slice(0, 7);
-  const lastCloseItems = snapshotsWithItems[0]?.items ?? [];
+  const lastClose = snapshotsWithItems[0];
+  const lastCloseItems = lastClose?.items ?? [];
+  const since = <T extends { date: string }>(rows: readonly T[]) =>
+    lastClose ? flowsSinceClose(rows, lastClose.date, openMonth) : [];
   const monthNet =
-    rawIncomes
-      .filter((row) => (row.date as string).slice(0, 7) === openMonth)
+    since(rawIncomes)
       .reduce((sum, row) => sum + flowToArs(row), 0) -
-    (rawExpenses ?? [])
-      .filter((row) => (row.date as string).slice(0, 7) === openMonth)
+    since(rawExpenses ?? [])
       .reduce((sum, row) => sum + flowToArs(row), 0) -
     // Not a gasto, so it is in no expense row — but the money did leave a
     // balance the last close counted, so the estimate has to lose it too.
     // Converted at today's rate, like the close it is being subtracted from,
     // rather than at the rate of each operation's own date.
-    convertToArs(tradeLossesUsd(trades, openMonth), "USD", exchangeRates);
+    convertToArs(tradeLossesUsd(since(trades)), "USD", exchangeRates);
 
   const estimatedCurrentArs =
     lastCloseItems.length > 0

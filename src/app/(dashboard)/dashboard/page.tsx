@@ -13,7 +13,8 @@ import { resolveCategories, iconMap, fixedCategoryNames } from "@/lib/utils/expe
 import { AlertsPanel } from "@/components/dashboard/AlertsPanel";
 import { getCryptoPrices } from "@/lib/api/crypto-prices";
 import { convertToArs } from "@/lib/utils/currency-conversion";
-import { formatCurrency, formatTimeOfDay } from "@/lib/utils/format";
+import { formatCurrency, formatDayMonth, formatTimeOfDay } from "@/lib/utils/format";
+import { flowsSinceClose, closeEndsPreviousMonth } from "@/lib/utils/patrimony-estimate";
 import { tradeIncomes, tradeLossesUsd } from "@/lib/utils/trading";
 import type { ExchangeRates as Rates } from "@/types/database";
 
@@ -162,19 +163,29 @@ export default async function DashboardPage() {
       ? ((Number(latest.total_ars) - Number(previous.total_ars)) / Number(previous.total_ars)) * 100
       : undefined;
 
+  const curLossesArs = convertToArs(curLossesUsd, "USD", fx);
+
+  // Estimated patrimony: the last close revalued at today's rates, plus every
+  // movement since that close. Usually that is this month's, but a month left
+  // unclosed still has to count — see `flowsSinceClose`.
+  const latestItems = latestWithItems?.patrimony_snapshot_items ?? [];
+  const closeDate: string | undefined = latest?.date;
+  const sinceIncomes = closeDate ? flowsSinceClose(allIncomes, closeDate, curMonth) : [];
+  const sinceExpenses = closeDate ? flowsSinceClose(allExpenses, closeDate, curMonth) : [];
+  const sinceIncomesArs = sinceIncomes.reduce((s, i) => s + toArs(i), 0);
+  const sinceExpensesArs = sinceExpenses.reduce((s, e) => s + toArs(e), 0);
   // A trading loss is real money gone from a balance the last close counted, so
   // it belongs in the estimate — even though it is not a gasto and appears in no
   // expense figure above.
-  const curLossesArs = convertToArs(curLossesUsd, "USD", fx);
-
-  // Estimated patrimony
-  const latestItems = latestWithItems?.patrimony_snapshot_items ?? [];
+  const sinceLossesArs = closeDate
+    ? convertToArs(tradeLossesUsd(flowsSinceClose(trades, closeDate, curMonth)), "USD", fx)
+    : 0;
   let estimatedArs: number | null = null;
   if (latestItems.length > 0) {
     estimatedArs = latestItems.reduce((sum, item) => {
       return sum + convertToArs(Number((item as any).amount), (item as any).currency, fx);
     }, 0);
-    estimatedArs += totalIncomes - totalExpenses - curLossesArs;
+    estimatedArs += sinceIncomesArs - sinceExpensesArs - sinceLossesArs;
   }
 
   // === The equation behind the estimate ===
@@ -214,22 +225,28 @@ export default async function DashboardPage() {
         chain: [{ value: fmt(ethUsd, 0), unit: "USD" }, { value: fmt(usdRate) }],
       });
 
-    // `ingresos` already includes the trading profits, so this line matches
-    // MonthFlow's "Entró" exactly. The losses get a line of their own because
-    // they are not a gasto — nothing was bought.
-    if (totalIncomes > 0)
-      add({ amount: fmt(totalIncomes, 0), note: `ingresos de ${monthName}` });
-    if (totalExpenses > 0)
+    // `ingresos` already includes the trading profits, so when the last close
+    // ended last month this line matches MonthFlow's "Entró" exactly, and it
+    // is named after the month. With months left unclosed it covers more than
+    // this month, so it is named after the close instead. The losses get a line
+    // of their own because they are not a gasto — nothing was bought.
+    const since =
+      closeDate && !closeEndsPreviousMonth(closeDate, curMonth)
+        ? `desde el cierre del ${formatDayMonth(closeDate)}`
+        : `de ${monthName}`;
+    if (sinceIncomesArs > 0)
+      add({ amount: fmt(sinceIncomesArs, 0), note: `ingresos ${since}` });
+    if (sinceExpensesArs > 0)
       equationTerms.push({
         op: "−",
-        amount: fmt(totalExpenses, 0),
-        note: `gastos de ${monthName}`,
+        amount: fmt(sinceExpensesArs, 0),
+        note: `gastos ${since}`,
       });
-    if (curLossesArs > 0)
+    if (sinceLossesArs > 0)
       equationTerms.push({
         op: "−",
-        amount: fmt(curLossesArs, 0),
-        note: `pérdidas de trading de ${monthName}`,
+        amount: fmt(sinceLossesArs, 0),
+        note: `pérdidas de trading ${since}`,
       });
   }
 

@@ -114,6 +114,8 @@ Migrations live in `supabase/migrations/`. `supabase/seed.sql` and `seed_demo_us
 
 - `src/components/{feature}/` — Feature-specific components (expenses, income, investments, patrimony, settings)
 - `src/components/dashboard/` — Shell (Sidebar, TopBar, BottomNav) plus the dashboard's own blocks: `PatrimonyHero` → `PatrimonyEquation` (the net-worth arithmetic, the app's signature element) and `MonthFlow`
+
+The estimated net worth (dashboard hero, and the open month on the patrimony charts) is computed as **the last close revalued at today's rates, plus every movement since that close**. That last part comes from `flowsSinceClose()` in `src/lib/utils/patrimony-estimate.ts`, and both pages must use it so they agree. It is not "this month's movements": the two match only when the last close ended last month, and with months left unclosed that version dropped them. The equation names the window after the month in the usual case and after the close date otherwise ("desde el cierre del 31 jul").
 - `src/components/shared/` — Reusable generics (ConfirmDialog, EmptyState, LazySection, Select)
 - `src/components/ui/provider.tsx` — Root provider stack: `ThemeProvider` (next-themes, `attribute="class"`, light default) → `ChakraProvider` → `MoneyVisibilityProvider`
 
