@@ -146,5 +146,40 @@ section("el índice de EEUU es opcional");
     nulled[0].patrimonyArs === 5_000_000 && nulled[0].netSavingsArs === 200_000);
 }
 
+section("el mes en curso");
+{
+  // March is the last month with anything recorded; today is in May.
+  const out = buildTimeline({ ...base, currentMonth: "2026-05", estimatedCurrentArs: 6_500_000 });
+  check("the series runs to the current month, not to the last movement",
+    out[out.length - 1].month === "2026-05", out.map((p) => p.month).join(","));
+  check("a month in between with nothing recorded is still a row",
+    out[3]?.month === "2026-04" && out[3].netSavingsArs === 0 && out[3].patrimonyArs === null);
+  check("the estimate lands on the current month",
+    out[4]?.patrimonyArs === 6_500_000 && out[4].patrimonyIsEstimate === true);
+  check("the last close stays a close, not the estimate",
+    out[2].patrimonyArs === 6_000_000 && out[2].patrimonyIsEstimate === undefined);
+
+  const futureFlow = buildTimeline({
+    ...base,
+    flows: [...base.flows, { date: "2026-06-10", amountArs: 1_000, sign: -1 }],
+    currentMonth: "2026-04",
+    estimatedCurrentArs: 6_500_000,
+  });
+  check("a flow dated in a later month does not carry the estimate with it",
+    futureFlow.find((p) => p.month === "2026-04")?.patrimonyIsEstimate === true);
+  check("and that later month is no estimate",
+    futureFlow.find((p) => p.month === "2026-06")?.patrimonyIsEstimate === undefined);
+
+  const alreadyClosed = buildTimeline({ ...base, currentMonth: "2026-03", estimatedCurrentArs: 9 });
+  check("a current month that already has a close keeps its close",
+    alreadyClosed[2].patrimonyArs === 6_000_000 && alreadyClosed[2].patrimonyIsEstimate === undefined);
+
+  const withoutEstimate = buildTimeline({ ...base, currentMonth: "2026-05" });
+  check("without an estimate the series still reaches today",
+    withoutEstimate[withoutEstimate.length - 1].month === "2026-05");
+  check("and today simply has no patrimony",
+    withoutEstimate[withoutEstimate.length - 1].patrimonyArs === null);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

@@ -14,6 +14,7 @@ import {
 import { formatCurrencyWhole, formatDateShort } from "@/lib/utils/format";
 import { useMoneyVisibility } from "@/lib/context/money-visibility";
 import { CHART } from "@/lib/constants/colors";
+import { axisScale } from "@/lib/utils/chart-scale";
 import {
   buildAlternatives,
   type AlternativesPoint,
@@ -81,16 +82,6 @@ const SERIES = [
 ] as const;
 
 const DESCRIPTION_ID = "alternatives-series-description";
-
-/** Rounds up to 1, 2, 2.5 or 5 x 10ⁿ, so gridline labels read as round numbers. */
-function niceStep(value: number): number {
-  if (value <= 0) return 1;
-  const magnitude = 10 ** Math.floor(Math.log10(value));
-  const normalised = value / magnitude;
-  const nice =
-    normalised <= 1 ? 1 : normalised <= 2 ? 2 : normalised <= 2.5 ? 2.5 : normalised <= 5 ? 5 : 10;
-  return nice * magnitude;
-}
 
 function compact(value: number): string {
   const abs = Math.abs(value);
@@ -216,34 +207,21 @@ export function AlternativesChart({ points }: { points: TimelinePoint[] }) {
   }, [series, selectedRange]);
 
   // A zero-based axis squeezes every line into a band, and the gaps between
-  // them are the whole point. The domain hugs the data instead, snapped to a
-  // round step so the gridline labels stay readable.
+  // them are the whole point. The domain hugs the data instead, on round
+  // gridlines — see `axisScale`.
   //
   // It measures only the visible lines, which is most of the reason to switch
   // one off: dropping the line that sets the floor lets the rest spread out.
   const scale = useMemo(() => {
     const keys = SERIES.filter((series) => !hidden.has(series.key)).map((s) => s.key);
-    const values = data.flatMap((d) => {
-      const row: (number | null)[] = keys.map((key) => d[key]);
-      // The projected segment shares the patrimony line's switch.
-      if (!hidden.has("patrimony")) row.push(d.patrimonyEstimate);
-      return row.filter((v): v is number => v !== null);
-    });
-    if (values.length === 0) return undefined;
-
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const pad = (max - min) * 0.12 || Math.abs(max) * 0.1 || 1;
-    const step = niceStep((max + pad - (min - pad)) / 4);
-    // Padding below zero would leave a band of empty negative space; only go
-    // there when the data actually does.
-    const floor = min >= 0 ? 0 : min - pad;
-    const lower = Math.max(Math.floor((min - pad) / step) * step, floor);
-    const upper = Math.ceil((max + pad) / step) * step;
-
-    const ticks: number[] = [];
-    for (let v = lower; v <= upper + step / 2; v += step) ticks.push(v);
-    return { domain: [lower, upper] as [number, number], ticks };
+    return axisScale(
+      data.flatMap((d) => {
+        const row: (number | null)[] = keys.map((key) => d[key]);
+        // The projected segment shares the patrimony line's switch.
+        if (!hidden.has("patrimony")) row.push(d.patrimonyEstimate);
+        return row.filter((v): v is number => v !== null);
+      })
+    );
   }, [data, hidden]);
 
   if (series.length < 2) return null;

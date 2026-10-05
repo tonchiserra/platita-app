@@ -190,6 +190,7 @@ export default async function PatrimonyPage() {
     inflationSeries,
     usCpiSeries,
     estimatedCurrentArs,
+    currentMonth: openMonth,
   });
 
   // Breakdown data from latest snapshot

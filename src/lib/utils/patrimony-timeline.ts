@@ -23,6 +23,11 @@ export interface TimelineInput {
    * close of its own, and flagged as an estimate so the chart can say so.
    */
   estimatedCurrentArs?: number | null;
+  /**
+   * Today's `YYYY-MM`. The series runs at least to here, and the estimate
+   * belongs to this month alone.
+   */
+  currentMonth?: string;
 }
 
 function monthOf(date: string): string {
@@ -57,10 +62,16 @@ export function buildTimeline(input: TimelineInput): TimelinePoint[] {
   const flowMonths = flows.map((f) => monthOf(f.date)).sort();
   const first = flowMonths[0];
 
-  const lastFlow = flowMonths[flowMonths.length - 1];
-  const lastSnapshot =
-    snapshots.length > 0 ? monthOf(snapshots[snapshots.length - 1].date) : first;
-  const last = lastFlow > lastSnapshot ? lastFlow : lastSnapshot;
+  // Runs to today even when nothing was recorded lately. Stopping at the last
+  // movement hung today's estimate on that month instead — August, say, with
+  // October's figure — and cut short every range measured back from today.
+  const current = input.currentMonth;
+  const last = [
+    flowMonths[flowMonths.length - 1],
+    snapshots.length > 0 ? monthOf(snapshots[snapshots.length - 1].date) : first,
+    current ?? first,
+  ].reduce((a, b) => (b > a ? b : a));
+  const estimateMonth = current ?? last;
 
   // Flows and snapshots bucketed by month, so gaps still produce a row.
   const savingsByMonth = new Map<string, number>();
@@ -108,7 +119,7 @@ export function buildTimeline(input: TimelineInput): TimelinePoint[] {
     const recorded = month === first ? anchorArs : patrimonyByMonth.get(month) ?? null;
     // The open month has no close of its own; fall back to the estimate.
     const useEstimate =
-      month === last && recorded === null && (input.estimatedCurrentArs ?? null) !== null;
+      month === estimateMonth && recorded === null && (input.estimatedCurrentArs ?? null) !== null;
 
     points.push({
       month,
