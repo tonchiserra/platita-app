@@ -25,9 +25,11 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims() refreshes a token that is about to expire (writing the new
+  // cookies through setAll above) and verifies it locally against the
+  // project's JWKS, so guarding a route no longer costs an Auth round-trip.
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims;
 
   // Protected routes — all dashboard routes require auth
   const protectedPaths = ["/dashboard"];

@@ -28,10 +28,20 @@ export async function createClient() {
   );
 }
 
-// Deduplicate getUser() calls within a single request
-// Layout + page both call getUser() — this ensures only one round-trip
-export const getUser = cache(async () => {
+export interface AuthUser {
+  id: string;
+  email: string | undefined;
+}
+
+// The signed-in user, read from the verified JWT rather than fetched. The
+// project signs tokens with an asymmetric key, so getClaims() checks the
+// signature locally against the cached JWKS — no round-trip to the Auth server,
+// which getUser() made on every render. It cannot see a session revoked before
+// its token expires, but neither can RLS: every query carries that same token.
+// Wrapped in `cache` so layout + page share one verification per request.
+export const getUser = cache(async (): Promise<AuthUser | null> => {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
+  const { data } = await supabase.auth.getClaims();
+  if (!data) return null;
+  return { id: data.claims.sub, email: data.claims.email };
 });

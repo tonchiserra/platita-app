@@ -21,7 +21,7 @@ export function InvestmentList({ investments }: InvestmentListProps) {
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const handleDelete = async (id: string) => {
-    const supabase = createClient();
+    const supabase = await createClient();
     await supabase.from("investments").delete().eq("id", id);
     router.refresh();
   };

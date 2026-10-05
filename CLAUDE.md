@@ -36,11 +36,13 @@ No test framework is configured. `npm run lint` does not type-check; use `npx ts
 
 Route protection lives in `src/proxy.ts` (Next 16's renamed middleware entry — it exports `proxy()`, not `middleware()`), which delegates to `src/lib/supabase/middleware.ts`. That refreshes the Supabase session on every request, redirects unauthenticated users off `/dashboard/*` to `/login?redirectTo=…`, and redirects authenticated users away from `/login` and `/register`.
 
+**Auth is checked with `getClaims()`, never `getUser()`, on the server.** The project signs JWTs with an asymmetric key (ES256), so `getClaims()` verifies the signature locally against a JWKS that auth-js caches process-wide for 10 minutes. `getUser()` is a round-trip to the Auth server (~300 ms from here). The proxy and the layout used to make one each, back to back, before any page could start its queries. That was more than half the time of every request. The trade-off is that a session revoked before its token expires still passes until `exp`. RLS has the same blind spot, because every query carries that same token.
+
 ### Supabase Client Pattern
 
 Two separate clients — never mix them:
-- **Server**: `src/lib/supabase/server.ts` — `createClient()` (async, uses `cookies()`) and `getUser()` (wrapped in `React.cache` so layout + page share one auth round-trip)
-- **Browser**: `src/lib/supabase/client.ts` — `createClient()` (module-level singleton, for `"use client"` components)
+- **Server**: `src/lib/supabase/server.ts` — `createClient()` (async, uses `cookies()`) and `getUser()`, which returns a minimal `AuthUser` (`{ id, email }`) read from the verified JWT claims. It is wrapped in `React.cache` so layout + page share one verification.
+- **Browser**: `src/lib/supabase/client.ts` — `createClient()` is **async**. It returns a promise singleton that imports `@supabase/ssr` on first use, which keeps supabase-js (~185 KB) out of every page's initial bundle: nothing touches the browser client until a save, a delete or a sign-in. `getSessionUser()` returns the user from the local session, with no network call, for stamping `user_id` on writes.
 
 The env var for the anon key is `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (not `..._ANON_KEY`).
 
@@ -63,11 +65,12 @@ Every query filters `.eq("user_id", user!.id)` explicitly even though RLS alread
 There are **zero Server Actions and zero API routes for mutations**. Every insert/update/delete runs in a `"use client"` component using the browser Supabase client, then calls `router.refresh()` to re-run the Server Component and pull fresh data. Forms read values via `new FormData(e.currentTarget)`, not controlled state.
 
 ```tsx
-const supabase = createClient();
-const { data: { user } } = await supabase.auth.getUser();
+const [supabase, user] = await Promise.all([createClient(), getSessionUser()]);
 const { error } = await supabase.from("expenses").insert({ user_id: user!.id, ... });
 router.refresh();
 ```
+
+Read `FormData` from `e.currentTarget` **before** the first `await`. React clears `currentTarget` once the handler yields.
 
 Consequences to respect when adding features:
 - **RLS is the only authorization layer.** Any new table needs its own policies in a migration or writes will silently fail.
@@ -76,7 +79,11 @@ Consequences to respect when adding features:
 
 ### Chart Loading Pattern
 
-Every Recharts chart is (a) imported with `next/dynamic` at the top of the page and (b) wrapped in `<LazySection>` in the JSX. `LazySection` (`src/components/shared/LazySection.tsx`) is an IntersectionObserver gate that renders a sized placeholder card until scrolled near. Follow both halves when adding a chart — Recharts is heavy and this keeps it off the initial bundle.
+Every Recharts chart is (a) declared with `next/dynamic` in `src/components/shared/lazy-charts.tsx` and imported from there by the page, and (b) wrapped in `<LazySection>` in the JSX. `LazySection` (`src/components/shared/LazySection.tsx`) is an IntersectionObserver gate that renders a sized placeholder card until scrolled near. Follow both halves when adding a chart: Recharts weighs ~295 KB, and this keeps it off the initial bundle.
+
+The `dynamic()` calls **must** live in that `"use client"` module. When `next/dynamic` is called from a Server Component page, the chart still goes into the page's client manifest, and Recharts ships with the first load. The build output confirms this. Calling it from a Client Component makes the chunk load when `LazySection` first renders the chart. Each `dynamic()` there passes `{ loading }`, which renders `SectionPlaceholder`. That placeholder reads the enclosing `LazySection`'s `minHeight` from context and keeps the same sized card on screen while the chunk downloads. Without it the section collapsed to zero height in between, and everything below it jumped (CLS 0.14 while scrolling the dashboard).
+
+Long lists grouped by month (`ExpenseList`, `IncomeList`, `TradeList`) pass `lazyMount` to `Collapsible.Root`. Ark mounts collapsed content by default, so every row of every month rendered on load: thousands of DOM nodes and a visible freeze on the expenses page.
 
 ### Currency Conversion
 
@@ -114,7 +121,9 @@ Pages and layouts are Server Components; forms, lists, and charts are Client Com
 
 ### Styling
 
-Chakra UI v3 with semantic tokens defined in `src/lib/theme/index.ts` (merged into `defaultConfig` via `createSystem`). Use token names, never raw colors — they resolve per color mode automatically. Responsive props use `base`/`md`/`lg`.
+Chakra UI v3 with semantic tokens defined in `src/lib/theme/index.ts`. Use token names, never raw colors; they resolve per color mode automatically. Responsive props use `base`/`md`/`lg`.
+
+The system is built from `defaultBaseConfig` plus Chakra's own tokens and **only the recipes the app renders**: `button`, `heading`, `input`, `link`, `spinner` (used by Button's `loading`), and the slot recipes `collapsible` and `dialog`. The full `defaultConfig` ships ~75 recipes and costs ~86 KB of the Chakra chunk. A component without its recipe renders unstyled instead of failing, so **when adding a new Chakra component, register its recipe in `themeConfig`**. Recipes are exported from `@chakra-ui/react/theme` as `<name>Recipe` or `<name>SlotRecipe`.
 
 - **Surfaces**: `bg.page`, `bg.card`, `bg.sunk` (recessed panels), `bg.input`, `bg.hover`
 - **Rules**: `border.card`, `border.input`, `border.strong`

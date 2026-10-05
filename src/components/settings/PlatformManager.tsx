@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Select } from "@/components/shared/Select";
 import { Box, Button, Flex, Input, Text, VStack } from "@chakra-ui/react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getSessionUser } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { PLATFORM_TYPES, PLATFORM_TYPE_LABELS } from "@/lib/constants/currencies";
 import type { Platform } from "@/types/database";
@@ -24,11 +24,7 @@ export function PlatformManager({ platforms }: PlatformManagerProps) {
     setError("");
 
     const formData = new FormData(e.currentTarget);
-    const supabase = createClient();
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const [supabase, user] = await Promise.all([createClient(), getSessionUser()]);
 
     const { error: insertError } = await supabase.from("platforms").insert({
       user_id: user!.id,
@@ -49,7 +45,7 @@ export function PlatformManager({ platforms }: PlatformManagerProps) {
   };
 
   const handleToggle = async (id: string, isActive: boolean) => {
-    const supabase = createClient();
+    const supabase = await createClient();
     await supabase
       .from("platforms")
       .update({ is_active: !isActive })
@@ -58,7 +54,7 @@ export function PlatformManager({ platforms }: PlatformManagerProps) {
   };
 
   const handleDelete = async (id: string) => {
-    const supabase = createClient();
+    const supabase = await createClient();
     await supabase.from("platforms").delete().eq("id", id);
     router.refresh();
   };

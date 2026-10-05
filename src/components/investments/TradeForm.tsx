@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Box, Button, Flex, Input, Text, VStack } from "@chakra-ui/react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getSessionUser } from "@/lib/supabase/client";
 import { Select } from "@/components/shared/Select";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import type { Platform } from "@/types/database";
@@ -96,10 +96,7 @@ export function TradeForm({ platforms }: TradeFormProps) {
     }
 
     setLoading(true);
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const [supabase, user] = await Promise.all([createClient(), getSessionUser()]);
 
     const sign = result === "loss" ? -1 : 1;
     const pct = formData.get("pnl_pct") as string;

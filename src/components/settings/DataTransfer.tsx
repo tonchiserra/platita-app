@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { Box, Button, Flex, Text, VStack } from "@chakra-ui/react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getSessionUser } from "@/lib/supabase/client";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import type {
   Expense,
@@ -128,9 +128,9 @@ function fetchAll<T>(
   filter?: { column: string; value: string },
   tolerateMissing = false
 ) {
-  const supabase = createClient();
   return fetchAllPages<T>(
     async (from, to) => {
+      const supabase = await createClient();
       let query = supabase.from(table).select(columns).order(order).range(from, to);
       if (filter) query = query.eq(filter.column, filter.value);
       const { data, error } = await query;
@@ -149,10 +149,7 @@ async function fetchBackup(): Promise<{
   missingTrades: boolean;
   droppedItems: number;
 }> {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No hay una sesión activa.");
   const id = user.id;
 
@@ -378,12 +375,10 @@ export function DataTransfer() {
     if (!pending) return;
     reset();
     setBusy("import");
-    const supabase = createClient();
+    const supabase = await createClient();
 
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getSessionUser();
       const id = user!.id;
 
       const { data: before } = await fetchBackup();

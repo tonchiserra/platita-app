@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Select } from "@/components/shared/Select";
 import { Box, Button, Flex, Input, Text, VStack } from "@chakra-ui/react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getSessionUser } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { INCOME_SOURCES } from "@/lib/constants/sources";
 import type { Platform } from "@/types/database";
@@ -23,11 +23,7 @@ export function IncomeForm({ platforms }: IncomeFormProps) {
     setError("");
 
     const formData = new FormData(e.currentTarget);
-    const supabase = createClient();
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const [supabase, user] = await Promise.all([createClient(), getSessionUser()]);
 
     const { error: insertError } = await supabase.from("incomes").insert({
       user_id: user!.id,

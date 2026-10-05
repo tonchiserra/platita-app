@@ -84,7 +84,7 @@ export function IncomeList({ incomes, usdRate }: IncomeListProps) {
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const handleDelete = async (id: string) => {
-    const supabase = createClient();
+    const supabase = await createClient();
     await supabase.from("incomes").delete().eq("id", id);
     router.refresh();
   };
@@ -101,8 +101,10 @@ export function IncomeList({ incomes, usdRate }: IncomeListProps) {
 
   return (
     <Box display="flex" flexDirection="column" gap="4">
+      {/* A closed month mounts its rows on first open — rendering every row of
+          every month up front made the page freeze on load. */}
       {groups.map((group, gi) => (
-        <Collapsible.Root key={group.key} defaultOpen={gi === 0}>
+        <Collapsible.Root key={group.key} defaultOpen={gi === 0} lazyMount>
           <Box
             bg="bg.card"
             borderRadius="xl"

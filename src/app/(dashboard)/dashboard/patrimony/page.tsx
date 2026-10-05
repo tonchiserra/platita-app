@@ -1,6 +1,6 @@
-import dynamic from "next/dynamic";
 import { createClient, getUser } from "@/lib/supabase/server";
 import { LazySection } from "@/components/shared/LazySection";
+import { PatrimonyChart, PatrimonyBreakdownChart, AlternativesChart } from "@/components/shared/lazy-charts";
 import {
   getDolarBlue,
   getEuroBlue,
@@ -15,16 +15,6 @@ import { tradeIncomes, tradeLossesUsd } from "@/lib/utils/trading";
 import { RETURN_SOURCES } from "@/lib/constants/sources";
 import { PatrimonyPageClient } from "@/components/patrimony/PatrimonyPageClient";
 import type { ExchangeRates, PatrimonySnapshotFull } from "@/types/database";
-
-const PatrimonyChart = dynamic(() =>
-  import("@/components/dashboard/PatrimonyChart").then((m) => m.PatrimonyChart)
-);
-const PatrimonyBreakdownChart = dynamic(() =>
-  import("@/components/patrimony/PatrimonyBreakdownChart").then((m) => m.PatrimonyBreakdownChart)
-);
-const AlternativesChart = dynamic(() =>
-  import("@/components/patrimony/AlternativesChart").then((m) => m.AlternativesChart)
-);
 
 export default async function PatrimonyPage() {
   const [user, supabase] = await Promise.all([getUser(), createClient()]);

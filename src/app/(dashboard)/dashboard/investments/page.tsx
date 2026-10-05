@@ -1,15 +1,11 @@
-import dynamic from "next/dynamic";
 import { VStack } from "@chakra-ui/react";
 import { createClient, getUser } from "@/lib/supabase/server";
 import { InvestmentForm } from "@/components/investments/InvestmentForm";
 import { InvestmentList } from "@/components/investments/InvestmentList";
 import { LazySection } from "@/components/shared/LazySection";
+import { InvestmentChart } from "@/components/shared/lazy-charts";
 import { getCryptoPriceMap } from "@/lib/api/crypto-prices";
 import { getDolarBlue } from "@/lib/api/exchange-rates";
-
-const InvestmentChart = dynamic(() =>
-  import("@/components/investments/InvestmentChart").then((m) => m.InvestmentChart)
-);
 
 export default async function InvestmentsPage() {
   const [user, supabase] = await Promise.all([getUser(), createClient()]);

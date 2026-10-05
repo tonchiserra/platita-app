@@ -1,4 +1,55 @@
-import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
+import { createSystem, defaultBaseConfig, defineConfig } from "@chakra-ui/react";
+import {
+  animationStyles,
+  breakpoints,
+  buttonRecipe,
+  collapsibleSlotRecipe,
+  cssVarsPrefix,
+  cssVarsRoot,
+  dialogSlotRecipe,
+  globalCss,
+  headingRecipe,
+  inputRecipe,
+  keyframes,
+  layerStyles,
+  linkRecipe,
+  semanticTokens,
+  spinnerRecipe,
+  textStyles,
+  tokens,
+} from "@chakra-ui/react/theme";
+
+// Chakra's `defaultConfig` with only the recipes this app renders. The default
+// carries ~75 component recipes, and every one ships in the bundle and is
+// compiled at startup whether or not anything uses it. A component whose
+// recipe is missing renders unstyled rather than failing, so a new Chakra
+// component needs its recipe added here (`spinner` is Button's `loading`).
+const themeConfig = defineConfig({
+  preflight: true,
+  cssVarsPrefix,
+  cssVarsRoot,
+  globalCss,
+  theme: {
+    breakpoints,
+    keyframes,
+    tokens,
+    semanticTokens,
+    textStyles,
+    layerStyles,
+    animationStyles,
+    recipes: {
+      button: buttonRecipe,
+      heading: headingRecipe,
+      input: inputRecipe,
+      link: linkRecipe,
+      spinner: spinnerRecipe,
+    },
+    slotRecipes: {
+      collapsible: collapsibleSlotRecipe,
+      dialog: dialogSlotRecipe,
+    },
+  },
+});
 
 const config = defineConfig({
   globalCss: {
@@ -131,4 +182,4 @@ const config = defineConfig({
   },
 });
 
-export const system = createSystem(defaultConfig, config);
+export const system = createSystem(defaultBaseConfig, themeConfig, config);

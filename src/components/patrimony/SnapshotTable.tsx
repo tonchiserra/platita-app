@@ -111,7 +111,7 @@ export function SnapshotTable({
   );
 
   const handleDelete = async (id: string) => {
-    const supabase = createClient();
+    const supabase = await createClient();
     await supabase.from("patrimony_snapshots").delete().eq("id", id);
     router.refresh();
   };

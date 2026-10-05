@@ -1,4 +1,3 @@
-import dynamic from "next/dynamic";
 import { VStack, SimpleGrid } from "@chakra-ui/react";
 import { createClient, getUser } from "@/lib/supabase/server";
 import { PatrimonyHero } from "@/components/dashboard/PatrimonyHero";
@@ -6,6 +5,7 @@ import type { EquationTerm } from "@/components/dashboard/PatrimonyEquation";
 import { MonthFlow } from "@/components/dashboard/MonthFlow";
 import { ExchangeRates, type Rate } from "@/components/dashboard/ExchangeRates";
 import { LazySection } from "@/components/shared/LazySection";
+import { ExpenseCategoryChart, ExpenseTrendChart, IncomeSourceChart, IncomeTrendChart, CashflowChart, PatrimonyChart, PatrimonyBreakdownChart } from "@/components/shared/lazy-charts";
 import { getDolarBlue, getEuroBlue } from "@/lib/api/exchange-rates";
 import { getMonthlyInflation, inflationBetween } from "@/lib/api/inflation";
 import { buildAlerts } from "@/lib/utils/alerts";
@@ -16,28 +16,6 @@ import { convertToArs } from "@/lib/utils/currency-conversion";
 import { formatCurrency, formatTimeOfDay } from "@/lib/utils/format";
 import { tradeIncomes, tradeLossesUsd } from "@/lib/utils/trading";
 import type { ExchangeRates as Rates } from "@/types/database";
-
-const ExpenseCategoryChart = dynamic(() =>
-  import("@/components/expenses/ExpenseCategoryChart").then((m) => m.ExpenseCategoryChart)
-);
-const ExpenseTrendChart = dynamic(() =>
-  import("@/components/expenses/ExpenseTrendChart").then((m) => m.ExpenseTrendChart)
-);
-const IncomeSourceChart = dynamic(() =>
-  import("@/components/income/IncomeSourceChart").then((m) => m.IncomeSourceChart)
-);
-const IncomeTrendChart = dynamic(() =>
-  import("@/components/income/IncomeTrendChart").then((m) => m.IncomeTrendChart)
-);
-const CashflowChart = dynamic(() =>
-  import("@/components/dashboard/CashflowChart").then((m) => m.CashflowChart)
-);
-const PatrimonyChart = dynamic(() =>
-  import("@/components/dashboard/PatrimonyChart").then((m) => m.PatrimonyChart)
-);
-const PatrimonyBreakdownChart = dynamic(() =>
-  import("@/components/patrimony/PatrimonyBreakdownChart").then((m) => m.PatrimonyBreakdownChart)
-);
 
 function buildMonthKey(date: string) {
   return date.slice(0, 7);

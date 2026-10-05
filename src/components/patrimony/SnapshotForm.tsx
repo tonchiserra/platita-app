@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Select } from "@/components/shared/Select";
 import { Box, Button, Flex, Input, Text, VStack, Heading } from "@chakra-ui/react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getSessionUser } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { formatCurrency } from "@/lib/utils/format";
 import { convertToArs } from "@/lib/utils/currency-conversion";
@@ -216,8 +216,7 @@ export function SnapshotForm({
     if (!newPlatformName.trim()) return;
     setSavingPlatform(true);
 
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const [supabase, user] = await Promise.all([createClient(), getSessionUser()]);
 
     const { data, error: insertError } = await supabase
       .from("platforms")
@@ -271,8 +270,7 @@ export function SnapshotForm({
     setLoading(true);
     setError("");
 
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const [supabase, user] = await Promise.all([createClient(), getSessionUser()]);
 
     const items = collectItems();
 

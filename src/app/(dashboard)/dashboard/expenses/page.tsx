@@ -1,18 +1,11 @@
-import dynamic from "next/dynamic";
 import { VStack, Heading, SimpleGrid } from "@chakra-ui/react";
 import { createClient, getUser } from "@/lib/supabase/server";
 import { ExpenseForm } from "@/components/expenses/ExpenseForm";
 import { ExpenseList } from "@/components/expenses/ExpenseList";
 import { LazySection } from "@/components/shared/LazySection";
+import { ExpenseCategoryChart, ExpenseTrendChart } from "@/components/shared/lazy-charts";
 import { getDolarBlue } from "@/lib/api/exchange-rates";
 import { resolveCategories, iconMap } from "@/lib/utils/expense-categories";
-
-const ExpenseCategoryChart = dynamic(() =>
-  import("@/components/expenses/ExpenseCategoryChart").then((m) => m.ExpenseCategoryChart)
-);
-const ExpenseTrendChart = dynamic(() =>
-  import("@/components/expenses/ExpenseTrendChart").then((m) => m.ExpenseTrendChart)
-);
 
 function buildMonthKey(date: string) {
   return date.slice(0, 7);

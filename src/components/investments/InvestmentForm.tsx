@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Select } from "@/components/shared/Select";
 import { Box, Button, Flex, Input, Text, VStack } from "@chakra-ui/react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getSessionUser } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { ASSET_TYPES } from "@/lib/constants/currencies";
 import type { Platform } from "@/types/database";
@@ -23,11 +23,7 @@ export function InvestmentForm({ platforms }: InvestmentFormProps) {
     setError("");
 
     const formData = new FormData(e.currentTarget);
-    const supabase = createClient();
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const [supabase, user] = await Promise.all([createClient(), getSessionUser()]);
 
     const totalAmount = parseFloat(formData.get("total_amount") as string);
     const pricePerUnit = parseFloat(formData.get("price_per_unit") as string);

@@ -1,16 +1,12 @@
-import dynamic from "next/dynamic";
 import { VStack } from "@chakra-ui/react";
 import { createClient, getUser } from "@/lib/supabase/server";
 import { TradeForm } from "@/components/investments/TradeForm";
 import { TradeList } from "@/components/investments/TradeList";
 import { TradeStats } from "@/components/investments/TradeStats";
 import { LazySection } from "@/components/shared/LazySection";
+import { TradePnlChart } from "@/components/shared/lazy-charts";
 import { tradePnlByMonth, tradeStats } from "@/lib/utils/trading";
 import type { TradeWithPlatform } from "@/types/database";
-
-const TradePnlChart = dynamic(() =>
-  import("@/components/investments/TradePnlChart").then((m) => m.TradePnlChart)
-);
 
 function formatMonthLabel(key: string) {
   const d = new Date(`${key}-01T00:00:00`);

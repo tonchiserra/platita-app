@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Box, Button, Flex, Input, Text, VStack } from "@chakra-ui/react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getSessionUser } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { DEFAULT_CATEGORY_OPTIONS } from "@/lib/utils/expense-categories";
@@ -26,10 +26,7 @@ export function CategoryManager({ categories }: CategoryManagerProps) {
   const handleAdoptDefaults = async () => {
     setLoading(true);
     setError("");
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const [supabase, user] = await Promise.all([createClient(), getSessionUser()]);
 
     const { error: insertError } = await supabase.from("expense_categories").insert(
       DEFAULT_CATEGORY_OPTIONS.map((c, i) => ({
@@ -55,10 +52,7 @@ export function CategoryManager({ categories }: CategoryManagerProps) {
     setError("");
 
     const formData = new FormData(e.currentTarget);
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const [supabase, user] = await Promise.all([createClient(), getSessionUser()]);
 
     const { error: insertError } = await supabase.from("expense_categories").insert({
       user_id: user!.id,
@@ -84,7 +78,7 @@ export function CategoryManager({ categories }: CategoryManagerProps) {
   const handleSaveEdit = async (id: string, e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { error: updateError } = await supabase
       .from("expense_categories")
@@ -104,7 +98,7 @@ export function CategoryManager({ categories }: CategoryManagerProps) {
   };
 
   const handleDelete = async (id: string) => {
-    const supabase = createClient();
+    const supabase = await createClient();
     await supabase.from("expense_categories").delete().eq("id", id);
     router.refresh();
   };

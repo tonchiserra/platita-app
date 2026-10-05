@@ -28,7 +28,7 @@ export function AccountSettings({ email }: { email?: string }) {
   const [signingOut, setSigningOut] = useState(false);
   const handleSignOut = async () => {
     setSigningOut(true);
-    const supabase = createClient();
+    const supabase = await createClient();
     await supabase.auth.signOut();
     router.push("/login");
   };

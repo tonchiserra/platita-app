@@ -1,19 +1,12 @@
-import dynamic from "next/dynamic";
 import { VStack, Heading, SimpleGrid } from "@chakra-ui/react";
 import { createClient, getUser } from "@/lib/supabase/server";
 import { IncomeForm } from "@/components/income/IncomeForm";
 import { IncomeList } from "@/components/income/IncomeList";
 import { LazySection } from "@/components/shared/LazySection";
+import { IncomeSourceChart, IncomeTrendChart } from "@/components/shared/lazy-charts";
 import { getDolarBlue } from "@/lib/api/exchange-rates";
 import { tradeIncomes } from "@/lib/utils/trading";
 import type { IncomeListRow } from "@/components/income/IncomeList";
-
-const IncomeSourceChart = dynamic(() =>
-  import("@/components/income/IncomeSourceChart").then((m) => m.IncomeSourceChart)
-);
-const IncomeTrendChart = dynamic(() =>
-  import("@/components/income/IncomeTrendChart").then((m) => m.IncomeTrendChart)
-);
 
 function buildMonthKey(date: string) {
   return date.slice(0, 7);
