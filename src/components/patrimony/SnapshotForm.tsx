@@ -1,613 +1,259 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { Select } from "@/components/shared/Select";
-import { Box, Button, Flex, Input, Text, VStack, Heading } from "@chakra-ui/react";
-import { createClient, getSessionUser } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
-import { formatCurrency } from "@/lib/utils/format";
-import { convertToArs } from "@/lib/utils/currency-conversion";
-import type { Platform, ExchangeRates, PatrimonySnapshotFull } from "@/types/database";
+import { useId, useState } from "react";
+import { Button, Field, Input, Money, Select, Textarea, ui } from "@/components/ui";
+import { Icon } from "@/components/ui/Icon";
+import { useWrite } from "@/lib/supabase/use-write";
 import { CURRENCIES, PLATFORM_TYPES, PLATFORM_TYPE_LABELS } from "@/lib/constants/currencies";
+import { convertToArs } from "@/lib/utils/currency-conversion";
+import { formatNumber, parseArgentineNumber, todayKey } from "@/lib/utils/format";
+import type { ExchangeRates } from "@/types/database";
+import s from "./patrimony.module.css";
 
-interface CurrencyRow {
+export interface FormPlatform {
   id: string;
+  name: string;
+  default_currency: string;
+}
+
+export interface FormSnapshot {
+  id: string;
+  date: string;
+  notes: string | null;
+  items: { platform_id: string; currency: string; amount: number }[];
+}
+
+interface Row {
+  key: number;
   currency: string;
   amount: string;
 }
 
-interface PlatformBalances {
-  [platformId: string]: CurrencyRow[];
-}
+let seq = 0;
+const row = (currency: string, amount = ""): Row => ({ key: ++seq, currency, amount });
+const toInput = (n: number) => String(n).replace(".", ",");
 
-interface SnapshotFormProps {
-  platforms: Platform[];
-  exchangeRates: ExchangeRates;
-  editingSnapshot: PatrimonySnapshotFull | null;
-  onClose: () => void;
-}
-
-let rowCounter = 0;
-function nextRowId() {
-  return `row_${++rowCounter}`;
-}
-
-function buildNotesFromRates(rates: ExchangeRates): string {
+function ratesNote(fx: ExchangeRates) {
   const parts: string[] = [];
-  if (rates.usdRate > 0) {
-    parts.push(`Dolar ${Math.round(rates.usdRate)}`);
-  }
-  if (rates.btcUsd > 0) {
-    const btcK =
-      rates.btcUsd >= 1000
-        ? `${Math.round(rates.btcUsd / 1000)}k`
-        : Math.round(rates.btcUsd).toString();
-    parts.push(`BTC ${btcK}`);
-  }
-  if (rates.ethUsd > 0) {
-    const ethVal =
-      rates.ethUsd >= 1000
-        ? `${(rates.ethUsd / 1000).toFixed(1)}k`
-        : Math.round(rates.ethUsd).toString();
-    parts.push(`ETH ${ethVal}`);
-  }
+  if (fx.usdRate > 0) parts.push(`Dólar ${Math.round(fx.usdRate)}`);
+  if (fx.btcUsd > 0) parts.push(`BTC ${Math.round(fx.btcUsd / 1000)}k`);
+  if (fx.ethUsd > 0) parts.push(`ETH ${(fx.ethUsd / 1000).toFixed(1)}k`);
   return parts.join(", ");
 }
 
+/**
+ * A monthly close: the balance of every platform, in each currency it holds.
+ * A new close starts from the last one's balances, so only what moved needs
+ * typing. The total is valued at today's rates and stored with the close.
+ */
 export function SnapshotForm({
   platforms: initialPlatforms,
-  exchangeRates,
-  editingSnapshot,
-  onClose,
-}: SnapshotFormProps) {
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [platforms, setPlatforms] = useState(initialPlatforms);
-  const [balances, setBalances] = useState<PlatformBalances>({});
-  const [notes, setNotes] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [hiddenPlatformIds, setHiddenPlatformIds] = useState<Set<string>>(new Set());
+  fx,
+  editing,
+  base,
+  onDone,
+}: {
+  platforms: FormPlatform[];
+  fx: ExchangeRates;
+  /** The close being edited. */
+  editing?: FormSnapshot;
+  /** The last close, used to prefill a new one. */
+  base?: FormSnapshot;
+  onDone?: () => void;
+}) {
+  const id = useId();
+  const { run, saving, error, setError } = useWrite();
+  const source = editing ?? base;
+  const [platforms, setPlatforms] = useState(() => {
+    const known = new Map(initialPlatforms.map((p) => [p.id, p]));
+    // A platform since deactivated still shows when this close holds money in it.
+    for (const item of source?.items ?? [])
+      if (!known.has(item.platform_id)) known.set(item.platform_id, { id: item.platform_id, name: "Plataforma archivada", default_currency: item.currency });
+    return [...known.values()];
+  });
+  const [rows, setRows] = useState<Record<string, Row[]>>(() => {
+    const out: Record<string, Row[]> = {};
+    for (const item of source?.items ?? []) (out[item.platform_id] ??= []).push(row(item.currency, toInput(item.amount)));
+    for (const p of initialPlatforms) out[p.id] ??= [row(p.default_currency)];
+    return out;
+  });
+  const [date, setDate] = useState(editing?.date ?? todayKey());
+  const [notes, setNotes] = useState(editing?.notes ?? ratesNote(fx));
+  const [adding, setAdding] = useState(false);
 
-  // New platform form
-  const [showNewPlatform, setShowNewPlatform] = useState(false);
-  const [newPlatformName, setNewPlatformName] = useState("");
-  const [newPlatformType, setNewPlatformType] = useState("bank");
-  const [newPlatformCurrency, setNewPlatformCurrency] = useState("ARS");
-  const [savingPlatform, setSavingPlatform] = useState(false);
-
-  const isEditing = !!editingSnapshot;
-
-  // Initialize balances with one default row per platform
-  const initBalances = useCallback((plats: Platform[]) => {
-    const b: PlatformBalances = {};
-    for (const p of plats) {
-      b[p.id] = [{ id: nextRowId(), currency: p.default_currency, amount: "" }];
-    }
-    setBalances(b);
-  }, []);
-
-  // Initialize from editing snapshot
-  const initFromSnapshot = useCallback(
-    (snapshot: PatrimonySnapshotFull, plats: Platform[]) => {
-      const b: PlatformBalances = {};
-      // Group items by platform
-      for (const item of snapshot.items) {
-        if (!b[item.platform_id]) {
-          b[item.platform_id] = [];
-        }
-        b[item.platform_id].push({
-          id: nextRowId(),
-          currency: item.currency,
-          amount: String(item.amount),
-        });
-      }
-      // Add empty row for platforms that have no items in this snapshot
-      for (const p of plats) {
-        if (!b[p.id]) {
-          b[p.id] = [{ id: nextRowId(), currency: p.default_currency, amount: "" }];
-        }
-      }
-      setBalances(b);
-      setDate(snapshot.date);
-      setNotes(snapshot.notes || "");
-    },
-    []
+  const items = platforms.flatMap((p) =>
+    (rows[p.id] ?? [])
+      .map((r) => ({ platform_id: p.id, currency: r.currency, amount: parseArgentineNumber(r.amount) }))
+      .filter((i) => Number.isFinite(i.amount) && i.amount !== 0)
   );
+  const totalArs = items.reduce((sum, i) => sum + convertToArs(i.amount, i.currency, fx), 0);
 
-  useEffect(() => {
-    setPlatforms(initialPlatforms);
-  }, [initialPlatforms]);
+  const update = (platformId: string, key: number, patch: Partial<Row>) =>
+    setRows((prev) => ({ ...prev, [platformId]: prev[platformId].map((r) => (r.key === key ? { ...r, ...patch } : r)) }));
+  const addRow = (platformId: string) =>
+    setRows((prev) => {
+      const used = new Set(prev[platformId]?.map((r) => r.currency));
+      return { ...prev, [platformId]: [...(prev[platformId] ?? []), row(CURRENCIES.find((c) => !used.has(c)) ?? "ARS")] };
+    });
+  const removeRow = (platformId: string, key: number) =>
+    setRows((prev) => ({ ...prev, [platformId]: prev[platformId].filter((r) => r.key !== key) }));
 
-  // Handle edit mode trigger or initialize new form
-  useEffect(() => {
-    if (editingSnapshot) {
-      setError("");
-      initFromSnapshot(editingSnapshot, initialPlatforms);
-    } else {
-      initBalances(initialPlatforms);
-      setNotes(buildNotesFromRates(exchangeRates));
-      setDate(new Date().toISOString().split("T")[0]);
-      setHiddenPlatformIds(new Set());
+  async function createPlatform(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    const data = new FormData(e.currentTarget);
+    const name = String(data.get("name") ?? "").trim();
+    const type = String(data.get("type"));
+    const currency = String(data.get("currency"));
+    if (!name) return;
+    const holder: { created: FormPlatform | null } = { created: null };
+    const ok = await run(async (supabase, userId) => {
+      const res = await supabase
+        .from("platforms")
+        .insert({ user_id: userId, name, type, default_currency: currency })
+        .select("id, name, default_currency")
+        .single();
+      holder.created = res.data as FormPlatform | null;
+      return res;
+    });
+    const p = holder.created;
+    if (ok && p) {
+      setPlatforms((prev) => [...prev, p]);
+      setRows((prev) => ({ ...prev, [p.id]: [row(p.default_currency)] }));
+      setAdding(false);
     }
-  }, [editingSnapshot, initialPlatforms, initFromSnapshot, initBalances, exchangeRates]);
+  }
 
-  // Live total calculation (skip hidden platforms)
-  const liveTotal = useMemo(() => {
-    let total = 0;
-    for (const [platformId, rows] of Object.entries(balances)) {
-      if (hiddenPlatformIds.has(platformId)) continue;
-      for (const row of rows) {
-        const amount = parseFloat(row.amount) || 0;
-        total += convertToArs(amount, row.currency, exchangeRates);
-      }
-    }
-    return total;
-  }, [balances, exchangeRates, hiddenPlatformIds]);
-
-  // Hide/show platforms in the form
-  const hidePlatform = (platformId: string) => {
-    setHiddenPlatformIds((prev) => new Set([...prev, platformId]));
-  };
-
-  const restorePlatform = (platformId: string) => {
-    setHiddenPlatformIds((prev) => {
-      const next = new Set(prev);
-      next.delete(platformId);
-      return next;
-    });
-    // Ensure the platform has at least one row
-    setBalances((prev) => {
-      if (!prev[platformId] || prev[platformId].length === 0) {
-        const plat = platforms.find((p) => p.id === platformId);
-        return {
-          ...prev,
-          [platformId]: [{ id: nextRowId(), currency: plat?.default_currency || "ARS", amount: "" }],
-        };
-      }
-      return prev;
-    });
-  };
-
-  const visiblePlatforms = platforms.filter((p) => !hiddenPlatformIds.has(p.id));
-  const hiddenPlatforms = platforms.filter((p) => hiddenPlatformIds.has(p.id));
-
-  const handleClose = () => {
-    setError("");
-    setNotes("");
-    setHiddenPlatformIds(new Set());
-    onClose();
-  };
-
-  // Add currency row to a platform
-  const addRow = (platformId: string) => {
-    setBalances((prev) => {
-      const existing = prev[platformId] || [];
-      const usedCurrencies = existing.map((r) => r.currency);
-      const available = CURRENCIES.filter((c) => !usedCurrencies.includes(c));
-      const nextCurrency = available[0] || "ARS";
-      return {
-        ...prev,
-        [platformId]: [...existing, { id: nextRowId(), currency: nextCurrency, amount: "" }],
-      };
-    });
-  };
-
-  // Remove currency row
-  const removeRow = (platformId: string, rowId: string) => {
-    setBalances((prev) => ({
-      ...prev,
-      [platformId]: (prev[platformId] || []).filter((r) => r.id !== rowId),
-    }));
-  };
-
-  // Update a row's currency or amount
-  const updateRow = (platformId: string, rowId: string, field: "currency" | "amount", value: string) => {
-    setBalances((prev) => ({
-      ...prev,
-      [platformId]: (prev[platformId] || []).map((r) =>
-        r.id === rowId ? { ...r, [field]: value } : r
-      ),
-    }));
-  };
-
-  // Add new platform
-  const handleAddPlatform = async () => {
-    if (!newPlatformName.trim()) return;
-    setSavingPlatform(true);
-
-    const [supabase, user] = await Promise.all([createClient(), getSessionUser()]);
-
-    const { data, error: insertError } = await supabase
-      .from("platforms")
-      .insert({
-        user_id: user!.id,
-        name: newPlatformName.trim(),
-        type: newPlatformType,
-        default_currency: newPlatformCurrency,
-        is_active: true,
-      })
-      .select("*")
-      .single();
-
-    if (insertError) {
-      setError(insertError.message);
-      setSavingPlatform(false);
+  async function save() {
+    if (items.length === 0) {
+      setError("Cargá al menos un saldo.");
       return;
     }
-
-    const newPlatform = data as Platform;
-    setPlatforms((prev) => [...prev, newPlatform]);
-    setBalances((prev) => ({
-      ...prev,
-      [newPlatform.id]: [{ id: nextRowId(), currency: newPlatform.default_currency, amount: "" }],
-    }));
-
-    setNewPlatformName("");
-    setNewPlatformType("bank");
-    setNewPlatformCurrency("ARS");
-    setShowNewPlatform(false);
-    setSavingPlatform(false);
-  };
-
-  // Collect non-zero items from balances (skip hidden platforms)
-  const collectItems = () => {
-    const items: { platform_id: string; currency: string; amount: number }[] = [];
-    for (const [platformId, rows] of Object.entries(balances)) {
-      if (hiddenPlatformIds.has(platformId)) continue;
-      for (const row of rows) {
-        const amount = parseFloat(row.amount);
-        if (amount && amount !== 0) {
-          items.push({ platform_id: platformId, currency: row.currency, amount });
-        }
+    const header = { date, total_ars: totalArs, notes: notes.trim() || null };
+    const ok = await run(async (supabase, userId) => {
+      let snapshotId = editing?.id;
+      if (editing) {
+        const up = await supabase.from("patrimony_snapshots").update(header).eq("id", editing.id);
+        if (up.error) return up;
+        const del = await supabase.from("patrimony_snapshot_items").delete().eq("snapshot_id", editing.id);
+        if (del.error) return del;
+      } else {
+        const ins = await supabase.from("patrimony_snapshots").insert({ ...header, user_id: userId }).select("id").single();
+        if (ins.error) return ins;
+        snapshotId = ins.data.id as string;
       }
-    }
-    return items;
-  };
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-
-    const [supabase, user] = await Promise.all([createClient(), getSessionUser()]);
-
-    const items = collectItems();
-
-    // Auto-calculate total ARS
-    let totalArs = 0;
-    for (const item of items) {
-      totalArs += convertToArs(item.amount, item.currency, exchangeRates);
-    }
-
-    if (isEditing) {
-      // Update existing snapshot
-      const { error: updateError } = await supabase
-        .from("patrimony_snapshots")
-        .update({ date, total_ars: totalArs, notes: notes || null })
-        .eq("id", editingSnapshot!.id);
-
-      if (updateError) {
-        setError(updateError.message);
-        setLoading(false);
-        return;
-      }
-
-      // Delete old items and insert new ones
-      const { error: deleteError } = await supabase
-        .from("patrimony_snapshot_items")
-        .delete()
-        .eq("snapshot_id", editingSnapshot!.id);
-
-      if (deleteError) {
-        setError(deleteError.message);
-        setLoading(false);
-        return;
-      }
-
-      if (items.length > 0) {
-        const { error: itemsError } = await supabase
-          .from("patrimony_snapshot_items")
-          .insert(items.map((i) => ({ ...i, snapshot_id: editingSnapshot!.id })));
-
-        if (itemsError) {
-          setError(itemsError.message);
-          setLoading(false);
-          return;
-        }
-      }
-    } else {
-      // Create new snapshot
-      const { data: snapshot, error: snapError } = await supabase
-        .from("patrimony_snapshots")
-        .insert({
-          user_id: user!.id,
-          date,
-          total_ars: totalArs,
-          notes: notes || null,
-        })
-        .select("id")
-        .single();
-
-      if (snapError) {
-        setError(snapError.message);
-        setLoading(false);
-        return;
-      }
-
-      if (items.length > 0) {
-        const { error: itemsError } = await supabase
-          .from("patrimony_snapshot_items")
-          .insert(items.map((i) => ({ ...i, snapshot_id: snapshot.id })));
-
-        if (itemsError) {
-          setError(itemsError.message);
-          setLoading(false);
-          return;
-        }
-      }
-    }
-
-    setLoading(false);
-    handleClose();
-    router.refresh();
-  };
+      return supabase.from("patrimony_snapshot_items").insert(items.map((i) => ({ ...i, snapshot_id: snapshotId })));
+    });
+    if (ok) onDone?.();
+  }
 
   return (
-    <Box bg="bg.card" borderRadius="xl" border="1px solid" borderColor="border.card" p="6">
-    <form onSubmit={handleSubmit}>
-      <Flex justify="space-between" align="center" mb="4">
-        <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.heading">
-          {isEditing ? "Editar registro" : "Nuevo registro de patrimonio"}
-        </Text>
-        <Button
-          size="sm"
-          variant="ghost"
-          color="fg.body"
-          onClick={handleClose}
-        >
-          Cancelar
-        </Button>
-      </Flex>
+    <div className={ui.stack}>
+      {!editing && base && <p className={s.hint}>Arranca con los saldos del último cierre: cambiá solo lo que se movió.</p>}
 
-      <VStack gap="4" align="stretch">
-        <Flex gap="4" flexWrap="wrap">
-          <Box flex="1" minW="200px">
-            <Text fontSize="sm" color="fg.body" mb="1">Fecha</Text>
-            <Input
-              name="date"
-              type="date"
-              required
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              bg="bg.input"
-              border="1px solid"
-              borderColor="border.input"
-              color="fg.heading"
-            />
-          </Box>
-          <Box flex="1" minW="200px">
-            <Text fontSize="sm" color="fg.body" mb="1">Total en ARS (calculado)</Text>
-            <Box bg="bg.hover" borderRadius="lg" px="4" py="2.5">
-              <Text fontSize="lg" fontWeight="bold" color="fg.heading">
-                {formatCurrency(liveTotal)}
-              </Text>
-            </Box>
-          </Box>
-        </Flex>
+      <div className={ui.grid2}>
+        <Field label="Fecha del cierre" htmlFor={`${id}-date`}>
+          <Input id={`${id}-date`} type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+        </Field>
+        <div className={s.liveTotal} aria-live="polite">
+          <span className={ui.label}>Total a hoy</span>
+          <Money className={s.liveFigure} value={totalArs} currency="ARS" />
+          {fx.usdRate > 0 && <Money className={s.liveUsd} value={totalArs / fx.usdRate} currency="USD" decimals={0} />}
+        </div>
+      </div>
 
-        <Box>
-          <Text fontSize="sm" color="fg.body" mb="1">
-            Notas (opcional)
-          </Text>
-          <Input
-            name="notes"
-            placeholder="Ej: Dolar a 1400, BTC 100k"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            bg="bg.input"
-            border="1px solid"
-            borderColor="border.input"
-            color="fg.heading"
-            _placeholder={{ color: "fg.muted" }}
-          />
-        </Box>
+      <div className={s.platforms}>
+        {platforms.map((p) => (
+          <fieldset key={p.id} className={s.platform}>
+            <legend className={s.platformName}>{p.name}</legend>
+            {(rows[p.id] ?? []).map((r) => (
+              <div key={r.key} className={s.balanceRow}>
+                <Select aria-label={`Moneda en ${p.name}`} value={r.currency} onChange={(e) => update(p.id, r.key, { currency: e.target.value })} className={s.curSelect}>
+                  {CURRENCIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </Select>
+                <Input
+                  aria-label={`Saldo en ${p.name} (${r.currency})`}
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={r.amount}
+                  onChange={(e) => update(p.id, r.key, { amount: e.target.value })}
+                  autoComplete="off"
+                />
+                <Button variant="ghost" size="sm" iconOnly aria-label="Quitar" onClick={() => removeRow(p.id, r.key)}>
+                  <Icon name="close" size={16} />
+                </Button>
+              </div>
+            ))}
+            <button type="button" className={s.addCurrency} onClick={() => addRow(p.id)}>
+              + Otra moneda
+            </button>
+          </fieldset>
+        ))}
+      </div>
 
-        {/* Platform balances */}
-        <Box>
-          <Flex justify="space-between" align="center" mb="3" mt="2">
-            <Heading size="sm" color="fg.heading">
-              Balances por plataforma
-            </Heading>
-            <Button
-              size="xs"
-              variant="ghost"
-              color="brand.500"
-              _hover={{ bg: "bg.hover" }}
-              onClick={() => setShowNewPlatform(!showNewPlatform)}
-            >
-              {showNewPlatform ? "Cancelar" : "+ Plataforma"}
+      {adding ? (
+        <form className={s.newPlatform} onSubmit={createPlatform}>
+          <p className="h3">Nueva plataforma</p>
+          <Field label="Nombre" htmlFor={`${id}-pname`}>
+            <Input id={`${id}-pname`} name="name" placeholder="Ej: Mercado Pago" required autoFocus />
+          </Field>
+          <div className={ui.grid2}>
+            <Field label="Tipo" htmlFor={`${id}-ptype`}>
+              <Select id={`${id}-ptype`} name="type" defaultValue="bank">
+                {PLATFORM_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {PLATFORM_TYPE_LABELS[t]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Moneda principal" htmlFor={`${id}-pcur`}>
+              <Select id={`${id}-pcur`} name="currency" defaultValue="ARS">
+                {CURRENCIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+          <div className={ui.actions}>
+            <Button variant="secondary" size="sm" onClick={() => setAdding(false)}>
+              Cancelar
             </Button>
-          </Flex>
-
-          {/* Inline new platform form */}
-          {showNewPlatform && (
-            <Box bg="bg.hover" borderRadius="lg" p="4" mb="4">
-              <Text fontSize="xs" fontWeight="semibold" color="fg.heading" mb="2">
-                Nueva plataforma
-              </Text>
-              <Flex gap="3" flexWrap="wrap" align="flex-end">
-                <Box flex="1" minW="120px">
-                  <Text fontSize="xs" color="fg.muted" mb="1">Nombre</Text>
-                  <Input
-                    value={newPlatformName}
-                    onChange={(e) => setNewPlatformName(e.target.value)}
-                    placeholder="Ej: Mercado Pago"
-                    bg="bg.input"
-                    border="1px solid"
-                    borderColor="border.input"
-                    color="fg.heading"
-                    _placeholder={{ color: "fg.muted" }}
-                  />
-                </Box>
-                <Box flex="1" minW="120px">
-                  <Text fontSize="xs" color="fg.muted" mb="1">Tipo</Text>
-                  <Select
-                    value={newPlatformType}
-                    onChange={(e) => setNewPlatformType(e.target.value)}
-                  >
-                    {PLATFORM_TYPES.map((t) => (
-                      <option key={t} value={t}>{PLATFORM_TYPE_LABELS[t]}</option>
-                    ))}
-                  </Select>
-                </Box>
-                <Box flex="1" minW="100px">
-                  <Text fontSize="xs" color="fg.muted" mb="1">Moneda</Text>
-                  <Select
-                    value={newPlatformCurrency}
-                    onChange={(e) => setNewPlatformCurrency(e.target.value)}
-                  >
-                    {CURRENCIES.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </Select>
-                </Box>
-                <Button
-                  size="sm"
-                  bg="brand.600"
-                  color="white"
-                  _hover={{ bg: "brand.500" }}
-                  onClick={handleAddPlatform}
-                  loading={savingPlatform}
-                  px="4"
-                >
-                  Agregar
-                </Button>
-              </Flex>
-            </Box>
-          )}
-
-          <VStack gap="4" align="stretch">
-            {visiblePlatforms.map((platform) => {
-              const rows = balances[platform.id] || [];
-
-              return (
-                <Box key={platform.id}>
-                  <Flex align="center" gap="2" mb="2">
-                    <Text fontSize="sm" fontWeight="medium" color="fg.heading">
-                      {platform.name}
-                    </Text>
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      color="brand.500"
-                      _hover={{ bg: "bg.hover" }}
-                      onClick={() => addRow(platform.id)}
-                      px="2"
-                    >
-                      +
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      color="fg.muted"
-                      _hover={{ color: "trend.down" }}
-                      onClick={() => hidePlatform(platform.id)}
-                      px="2"
-                    >
-                      Quitar
-                    </Button>
-                  </Flex>
-
-                  <VStack gap="2" align="stretch">
-                    {rows.map((row) => (
-                      <Flex key={row.id} gap="2" align="center">
-                        <Box w="100px">
-                          <Select
-                            value={row.currency}
-                            onChange={(e) => updateRow(platform.id, row.id, "currency", e.target.value)}
-                          >
-                            {CURRENCIES.map((c) => (
-                              <option key={c} value={c}>{c}</option>
-                            ))}
-                          </Select>
-                        </Box>
-                        <Box flex="1">
-                          <Input
-                            type="number"
-                            step="any"
-                            placeholder="0"
-                            value={row.amount}
-                            onChange={(e) => updateRow(platform.id, row.id, "amount", e.target.value)}
-                            bg="bg.input"
-                            border="1px solid"
-                            borderColor="border.input"
-                            color="fg.heading"
-                            _placeholder={{ color: "fg.muted" }}
-                          />
-                        </Box>
-                        {rows.length > 1 && (
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            color="fg.muted"
-                            _hover={{ color: "trend.down" }}
-                            aria-label="Quitar fila"
-                            onClick={() => removeRow(platform.id, row.id)}
-                            px="2"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
-                          </Button>
-                        )}
-                      </Flex>
-                    ))}
-                  </VStack>
-                </Box>
-              );
-            })}
-          </VStack>
-
-          {hiddenPlatforms.length > 0 && (
-            <Flex gap="2" flexWrap="wrap" mt="3" align="center">
-              <Text fontSize="xs" color="fg.muted">
-                Ocultas:
-              </Text>
-              {hiddenPlatforms.map((p) => (
-                <Button
-                  key={p.id}
-                  size="xs"
-                  variant="outline"
-                  color="fg.body"
-                  borderColor="border.input"
-                  _hover={{ bg: "bg.hover" }}
-                  onClick={() => restorePlatform(p.id)}
-                >
-                  + {p.name}
-                </Button>
-              ))}
-            </Flex>
-          )}
-        </Box>
-
-        {error && (
-          <Text fontSize="sm" color="trend.down">
-            {error}
-          </Text>
-        )}
-
-        <Button
-          type="submit"
-          bg="brand.600"
-          color="white"
-          _hover={{ bg: "brand.500" }}
-          loading={loading}
-          alignSelf="flex-end"
-          px="5"
-        >
-          {isEditing ? "Guardar cambios" : "Guardar Snapshot"}
+            <Button type="submit" size="sm" loading={saving}>
+              Agregar
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <Button variant="secondary" onClick={() => setAdding(true)}>
+          <Icon name="plus" size={18} /> Nueva plataforma
         </Button>
-      </VStack>
-    </form>
-    </Box>
+      )}
+
+      <Field label="Notas" htmlFor={`${id}-notes`} hint="Por defecto, las cotizaciones del día.">
+        <Textarea id={`${id}-notes`} value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+      </Field>
+
+      {error && (
+        <p className={ui.error} role="alert">
+          {error}
+        </p>
+      )}
+      <Button variant="accent" size="lg" block onClick={save} loading={saving}>
+        {editing ? "Guardar cambios" : "Guardar cierre"}
+      </Button>
+      {fx.usdRate > 0 && (
+        <p className={s.hint}>
+          Valuado con el blue a {formatNumber(fx.usdRate)}
+          {fx.btcUsd > 0 && `, BTC a US$ ${formatNumber(fx.btcUsd)}`}.
+        </p>
+      )}
+    </div>
   );
 }

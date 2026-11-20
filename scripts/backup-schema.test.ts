@@ -316,7 +316,7 @@ section("todo lo exportado se puede volver a importar");
     expenses: [{ date: "2026-08-01", amount: 45000.5, currency: "ARS", category: "Food", description: "Súper", platform: "Brubank" },
                { date: "2026-08-02", amount: 12, currency: "USD", category: "Subscriptions", description: "", platform: null }],
     incomes: [{ date: "2026-08-05", amount: 500, currency: "USD", source: "Salary", description: "", platform: "Brubank" }],
-    investments: [{ date: "2026-08-07", asset: "BTC", asset_type: "crypto", units: 0.01, price_per_unit: 65000, total_amount: 650, currency: "USD", platform: "Lemon", notes: null }],
+    investments: [{ date: "2026-08-07", asset: "BTC", asset_type: "crypto", side: "buy", units: 0.01, price_per_unit: 65000, total_amount: 650, currency: "USD", platform: "Lemon", notes: null }],
     trades: [{ date: "2026-08-19", asset: "BTC", direction: "long", pnl_usd: 420.5, pnl_pct: 12.4, leverage: 10, platform: "Lemon", notes: "Breakout" },
              { date: "2026-08-14", asset: "ETH", direction: "short", pnl_usd: -150, pnl_pct: -6.8, leverage: null, platform: null, notes: null }],
     snapshots: [{ date: "2026-08-31", total_ars: 17562263.32, notes: null }],

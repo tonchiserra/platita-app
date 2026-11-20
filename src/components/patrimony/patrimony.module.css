@@ -1,0 +1,197 @@
+.hint {
+  font-size: var(--fs-13);
+  color: var(--text-2);
+}
+
+.liveTotal {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: var(--space-12) var(--space-14);
+  border-radius: var(--radius-card);
+  background: var(--accent-soft);
+}
+.liveFigure {
+  font-family: var(--font-cifra);
+  font-weight: var(--fw-cifra);
+  font-size: var(--fs-26);
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.liveUsd {
+  font-size: var(--fs-13);
+  color: var(--text-2);
+}
+
+.platforms {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+.platform {
+  animation: rise 0.45s var(--ease-out) both;
+  border: 0;
+  padding: var(--space-14);
+  border-radius: var(--radius-card);
+  background: var(--block);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.platformName {
+  float: left;
+  width: 100%;
+  margin-bottom: var(--space-4);
+  font-size: var(--fs-14);
+  font-weight: 500;
+}
+.balanceRow {
+  display: grid;
+  grid-template-columns: 84px 1fr 36px;
+  align-items: center;
+  gap: var(--space-10);
+}
+.curSelect {
+  font-size: var(--fs-14);
+}
+.addCurrency {
+  align-self: flex-start;
+  margin-top: var(--space-4);
+  font-size: var(--fs-13);
+  color: var(--text-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.addCurrency:hover {
+  color: var(--text);
+}
+.newPlatform {
+  animation: rise 0.4s var(--ease-out) both;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-14);
+  padding: var(--space-16);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-card);
+}
+
+/* ---------- Closes ---------- */
+.closes {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-strong);
+}
+.close {
+  border-bottom: 1px solid var(--border);
+}
+.closeHead {
+  display: grid;
+  grid-template-columns: 1fr auto auto 20px;
+  align-items: center;
+  gap: var(--space-12);
+  width: 100%;
+  min-height: 64px;
+  padding: var(--space-10) 0;
+  text-align: left;
+  transition: padding var(--t-base) var(--ease-out);
+}
+.closeHead:hover {
+  padding-left: var(--space-6);
+}
+.closeDate {
+  font-weight: 380;
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-size: var(--fs-15);
+}
+.closeFigures {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.25;
+}
+.closeTotal {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.closeUsd {
+  font-size: var(--fs-12);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.closeDelta {
+  min-width: 64px;
+  text-align: right;
+}
+.chev {
+  color: var(--text-2);
+  transition: transform var(--t-base);
+}
+.closeHead[aria-expanded="true"] .chev {
+  transform: rotate(180deg);
+}
+@media (max-width: 420px) {
+  .closeHead {
+    grid-template-columns: 1fr auto 20px;
+  }
+  .closeDelta {
+    display: none;
+  }
+}
+.collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s var(--ease-out);
+}
+.collapse[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.collapseInner {
+  min-height: 0;
+  overflow: hidden;
+}
+.closeBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  padding: 0 0 var(--space-16);
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.3s ease, transform 0.4s var(--ease-out);
+}
+.collapse[data-open="true"] .closeBody {
+  opacity: 1;
+  transform: none;
+}
+.item {
+  animation: fade 0.4s var(--ease-out) both;
+}
+.items {
+  list-style: none;
+  border-radius: var(--radius-card);
+  background: var(--block);
+  padding: var(--space-4) var(--space-14);
+}
+.item {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-12);
+  padding: var(--space-10) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-14);
+}
+.item:last-child {
+  border-bottom: 0;
+}
+.itemAmounts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+.closeActions {
+  display: flex;
+  gap: var(--space-8);
+}

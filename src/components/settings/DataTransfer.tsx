@@ -1,10 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Box, Button, Flex, Text, VStack } from "@chakra-ui/react";
 import { useRouter } from "next/navigation";
 import { createClient, getSessionUser } from "@/lib/supabase/client";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { Button, ui } from "@/components/ui";
+import { ConfirmDialog } from "@/components/ui/client";
+import { Icon } from "@/components/ui/Icon";
+import s from "./settings.module.css";
 import type {
   Expense,
   ExpenseCategoryRow,
@@ -218,6 +220,7 @@ async function fetchBackup(): Promise<{
     date: row.date,
     asset: row.asset,
     asset_type: row.asset_type,
+    side: (row as { side?: string }).side === "sell" ? "sell" : "buy",
     units: Number(row.units),
     price_per_unit: Number(row.price_per_unit),
     total_amount: Number(row.total_amount),
@@ -453,10 +456,14 @@ export function DataTransfer() {
         if (incomeError) fail("Insertando ingresos", incomeError.message);
       }
 
+      const hasSales = pending.investments.some((row) => row.side === "sell");
       if (pending.investments.length > 0) {
         const { error: investmentError } = await supabase.from("investments").insert(
-          pending.investments.map(({ platform, ...row }) => ({
+          pending.investments.map(({ platform, side, ...row }) => ({
             ...row,
+            // Without a sale in the file the column is left to its default, so a
+            // restore still works on a database without migration 004.
+            ...(hasSales ? { side } : {}),
             user_id: id,
             platform_id: platformId(platform),
           }))
@@ -522,100 +529,60 @@ export function DataTransfer() {
   const counts = pending ? countRows(pending) : null;
 
   return (
-    <Box bg="bg.card" borderRadius="xl" border="1px solid" borderColor="border.card" p="6">
-      <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.heading" mb="1">
-        Tus datos
-      </Text>
-      <Text fontSize="xs" color="fg.muted" mb="4">
-        Exportá todo a una planilla, o cargá movimientos en masa con la plantilla
-      </Text>
-
-      <Flex gap="3" wrap="wrap">
-        <Button
-          size="sm"
-          borderRadius="l2"
-          bg="bg.sunk"
-          color="fg.heading"
-          _hover={{ bg: "bg.hover" }}
-          loading={busy === "export"}
-          disabled={busy !== null}
-          onClick={handleExport}
-        >
-          Exportar datos
+    <div className={ui.stack} style={{ gap: 14 }}>
+      <div className={ui.row}>
+        <Button variant="secondary" size="sm" loading={busy === "export"} disabled={busy !== null} onClick={handleExport}>
+          <Icon name="download" size={16} /> Exportar datos
         </Button>
-        <Button
-          size="sm"
-          borderRadius="l2"
-          bg="bg.sunk"
-          color="fg.heading"
-          _hover={{ bg: "bg.hover" }}
-          loading={busy === "template"}
-          disabled={busy !== null}
-          onClick={handleTemplate}
-        >
+        <Button variant="secondary" size="sm" loading={busy === "template"} disabled={busy !== null} onClick={handleTemplate}>
           Descargar plantilla
         </Button>
         <Button
+          variant="secondary"
           size="sm"
-          borderRadius="l2"
-          bg="bg.sunk"
-          color="fg.heading"
-          _hover={{ bg: "bg.hover" }}
           loading={busy === "read" || busy === "import"}
           disabled={busy !== null}
           onClick={() => fileInput.current?.click()}
         >
-          Importar datos
+          <Icon name="upload" size={16} /> Importar datos
         </Button>
-        <input
-          ref={fileInput}
-          type="file"
-          accept=".xlsx"
-          hidden
-          onChange={handleFile}
-          aria-label="Elegir la planilla a importar"
-        />
-      </Flex>
+        <input ref={fileInput} type="file" accept=".xlsx" hidden onChange={handleFile} aria-label="Elegir la planilla a importar" />
+      </div>
 
-      <Text fontSize="2xs" color="fg.muted" mt="3">
-        Importar reemplaza todos tus datos por los del archivo. Antes de borrar nada se descarga un
-        respaldo de lo que tenías.
-      </Text>
+      <p className={s.hint}>
+        Importar reemplaza todos tus datos por los del archivo. Antes de borrar nada se descarga un respaldo de lo que tenías.
+      </p>
 
       {notice && (
-        <Text fontSize="xs" color="trend.up" mt="3">
+        <p className={s.ok} role="status">
           {notice}
-        </Text>
+        </p>
       )}
       {error && (
-        <Text fontSize="xs" color="trend.down" mt="3">
+        <p className={ui.error} role="alert">
           {error}
-        </Text>
+        </p>
       )}
 
       {issues.length > 0 && (
-        <Box mt="4" bg="bg.sunk" borderRadius="lg" border="1px solid" borderColor="border.card" p="4">
-          <Text fontSize="xs" fontWeight="semibold" color="fg.heading" mb="2">
+        <div className={s.issues}>
+          <p className={s.issuesTitle}>
             No se importó nada. Revisá {issues.length === 1 ? "este problema" : `estos ${issues.length} problemas`}:
-          </Text>
-          <VStack align="stretch" gap="1">
+          </p>
+          <ul>
             {issues.slice(0, 15).map((issue, i) => (
-              <Text key={i} fontSize="xs" color="fg.body">
-                <Text as="span" fontFamily="mono" color="fg.muted" data-num>
+              <li key={i}>
+                <span className="muted num">
                   {issue.sheet}
                   {issue.row !== null ? `, fila ${issue.row}` : ""}
-                </Text>
+                </span>
                 {" — "}
                 {issue.message}
-              </Text>
+              </li>
             ))}
-            {issues.length > 15 && (
-              <Text fontSize="xs" color="fg.muted">
-                …y {issues.length - 15} más.
-              </Text>
-            )}
-          </VStack>
-        </Box>
+            {issues.length > 15 && <li className="muted">…y {issues.length - 15} más.</li>}
+          </ul>
+        </div>
       )}
 
       <ConfirmDialog
@@ -624,12 +591,13 @@ export function DataTransfer() {
         onConfirm={handleImport}
         title="¿Reemplazar todos tus datos?"
         confirmLabel="Reemplazar"
-        description={
+        loading={busy === "import"}
+        message={
           counts
             ? `Se van a borrar todos tus datos actuales y quedar únicamente los del archivo: ${tally(counts)}. Antes de borrar se descarga un respaldo de lo que tenés ahora. Esta acción no se puede deshacer desde la app.`
-            : undefined
+            : ""
         }
       />
-    </Box>
+    </div>
   );
 }

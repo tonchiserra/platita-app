@@ -1,95 +1,120 @@
-import { VStack } from "@chakra-ui/react";
-import { createClient, getUser } from "@/lib/supabase/server";
-import { InvestmentForm } from "@/components/investments/InvestmentForm";
-import { InvestmentList } from "@/components/investments/InvestmentList";
-import { LazySection } from "@/components/shared/LazySection";
-import { InvestmentChart } from "@/components/shared/lazy-charts";
-import { getCryptoPriceMap } from "@/lib/api/crypto-prices";
-import { getDolarBlue } from "@/lib/api/exchange-rates";
+import { Suspense } from "react";
+import { Section, Skeleton } from "@/components/ui";
+import { Icon } from "@/components/ui/Icon";
+import { Hero } from "@/components/dashboard/Hero";
+import { ChartCard, ChartTable, Legend, LineChart, chartVars } from "@/components/charts/Charts";
+import { NewOperationButton, OperationList } from "@/components/investments/PortfolioClient";
+import { PortfolioSummaryBoxes, PositionCards } from "@/components/investments/Positions";
+import { getPlatforms, hasSidesColumn } from "@/lib/data";
+import { getPerformance, getPortfolio } from "@/lib/compute/portfolio";
+import { currentMonthKey } from "@/lib/utils/format";
+import s from "@/components/investments/investments.module.css";
 
-export default async function InvestmentsPage() {
-  const [user, supabase] = await Promise.all([getUser(), createClient()]);
+export const metadata = { title: "Inversiones · Platita" };
 
-  const [{ data: platforms }, { data: investments }, dolarBlue] =
-    await Promise.all([
-      supabase
-        .from("platforms")
-        .select("*")
-        .eq("user_id", user!.id)
-        .eq("is_active", true)
-        .order("name"),
-      supabase
-        .from("investments")
-        .select("*, platform:platforms(*)")
-        .eq("user_id", user!.id)
-        .order("date", { ascending: false })
-        .limit(50),
-      getDolarBlue(),
-    ]);
+export default function InvestmentsPage() {
+  return (
+    <Suspense fallback={<Skeleton height={520} />}>
+      <PortfolioContent />
+    </Suspense>
+  );
+}
 
-  // Get unique crypto asset names from user investments
-  const cryptoAssets = [
-    ...new Set(
-      (investments ?? [])
-        .filter((inv) => inv.asset_type === "crypto")
-        .map((inv) => inv.asset as string)
-    ),
-  ];
-
-  // Fetch prices dynamically for whatever the user has
-  const priceMap = await getCryptoPriceMap(cryptoAssets);
-
-  // Group investments by asset
-  const byAsset: Record<string, { invested: number; units: number }> = {};
-  for (const inv of investments ?? []) {
-    const asset = inv.asset;
-    if (!byAsset[asset]) byAsset[asset] = { invested: 0, units: 0 };
-
-    let investedUsd = Number(inv.total_amount);
-    if (inv.currency === "ARS" && dolarBlue) {
-      investedUsd = investedUsd / dolarBlue.venta;
-    }
-
-    byAsset[asset].invested += investedUsd;
-    byAsset[asset].units += Number(inv.units);
-  }
-
-  const assetSummary = Object.entries(byAsset)
-    .map(([asset, data]) => ({
-      asset,
-      invested: data.invested,
-      units: data.units,
-      avgPrice: data.units > 0 ? data.invested / data.units : null,
-      currentValue:
-        priceMap[asset] !== undefined ? data.units * priceMap[asset] : null,
-    }))
-    .sort((a, b) => b.invested - a.invested);
-
-  const chartData = assetSummary.map((s) => ({
-    asset: s.asset,
-    invested: s.invested,
-    currentValue: s.currentValue,
-  }));
-
-  const assetsWithoutPrice = chartData
-    .filter((d) => d.currentValue === null)
-    .map((d) => d.asset);
+async function PortfolioContent() {
+  const [{ ops, positions, summary, manualByKey, manualAvailable, conv }, platforms, canSell] = await Promise.all([
+    getPortfolio(),
+    getPlatforms(),
+    hasSidesColumn(),
+  ]);
+  const platformOptions = platforms.filter((p) => p.is_active).map((p) => ({ id: p.id, name: p.name }));
+  const known = positions.map((p) => ({ asset: p.asset, assetType: p.assetType, units: p.units }));
+  const usdRate = conv.fx.usdRate;
+  const gainPct = summary.unrealizedPct;
 
   return (
-    <VStack gap="6" align="stretch">
-      <InvestmentForm platforms={platforms ?? []} />
-      {(investments ?? []).length > 0 && (
-        <LazySection minHeight="300px">
-          <InvestmentChart
-            data={chartData}
-            assetSummary={assetSummary}
-            assetsWithoutPrice={assetsWithoutPrice}
-          />
-        </LazySection>
+    <>
+      {!canSell && (
+        <p className={s.banner} role="note">
+          <Icon name="info" size={20} />
+          <span>
+            Para registrar ventas y precios manuales, aplicá la migración <code>004_performance_and_investments.sql</code> en el SQL editor de Supabase.
+          </span>
+        </p>
       )}
-      <LazySection minHeight="200px">
-        <InvestmentList investments={investments ?? []} />
-      </LazySection>
-    </VStack>
+
+      {ops.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <Hero
+            label="Valor de la cartera"
+            usd={summary.valueUsd}
+            ars={usdRate > 0 ? summary.valueUsd * usdRate : null}
+            change={gainPct}
+            changeLabel="sobre lo invertido"
+            meta={summary.unpricedAssets.length > 0 ? `Sin precio, valuados al costo: ${summary.unpricedAssets.join(", ")}.` : undefined}
+          />
+          <PortfolioSummaryBoxes summary={summary} usdRate={usdRate} />
+        </div>
+      )}
+
+      {ops.length > 0 && (
+        <Suspense fallback={<Skeleton height={340} />}>
+          <PerformanceChart />
+        </Suspense>
+      )}
+
+      {ops.length > 0 && (
+        <PositionCards positions={positions} manual={new Map([...manualByKey].map(([k, r]) => [k, { price: r.price, currency: r.currency }]))} manualAvailable={manualAvailable} />
+      )}
+
+      <Section label="Operaciones" title="Compras y ventas" aside={<NewOperationButton platforms={platformOptions} assets={known} canSell={canSell} />}>
+        <OperationList
+          operations={ops.map((o) => ({ ...o }))}
+          platforms={platformOptions}
+          assets={known}
+          canSell={canSell}
+        />
+      </Section>
+    </>
+  );
+}
+
+async function PerformanceChart() {
+  const perf = await getPerformance();
+  if (!perf) return null;
+  const current = currentMonthKey();
+  const notes = perf.atCost.map((c) => (c ? "Algún activo sin precio ese mes: va al costo" : undefined));
+  return (
+    <ChartCard
+      title="Rendimiento"
+      subtitle="Lo que pusiste contra lo que vale, mes a mes."
+      legend={
+        <Legend
+          items={[
+            { label: "Valor de mercado", color: chartVars.line, kind: "line" },
+            { label: "Capital invertido", color: chartVars.line2, kind: "line" },
+          ]}
+        />
+      }
+      table={
+        <ChartTable
+          months={perf.months}
+          columns={[
+            { label: "Valor", values: perf.value },
+            { label: "Invertido", values: perf.invested },
+          ]}
+        />
+      }
+      note="Invertido: compras menos lo cobrado por ventas. En ARS, el valor se pasa al blue de cada mes."
+    >
+      <LineChart
+        months={perf.months}
+        current={current}
+        notes={notes}
+        series={[
+          { key: "value", label: "Valor", color: chartVars.line, values: perf.value, area: true },
+          { key: "invested", label: "Invertido", color: chartVars.line2, values: perf.invested },
+        ]}
+      />
+    </ChartCard>
   );
 }

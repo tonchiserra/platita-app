@@ -1,0 +1,271 @@
+.fab {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: calc(var(--nav-h) + 16px + env(safe-area-inset-bottom));
+  z-index: 35;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: var(--shadow-flotante);
+  transition:
+    transform var(--t-base) var(--ease-spring),
+    background-color var(--t-fondo),
+    color var(--t-fondo),
+    box-shadow var(--t-base);
+  animation: pop 0.45s var(--ease-spring) 0.25s both;
+  -webkit-tap-highlight-color: transparent;
+}
+.fab > svg {
+  transition: transform 0.35s var(--ease-spring);
+}
+.fab:hover {
+  background: var(--primary-strong);
+  color: var(--on-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(39, 83, 150, 0.35);
+}
+.fab:hover > svg {
+  transform: rotate(90deg);
+}
+.fab:active {
+  transform: scale(0.92);
+}
+@media (min-width: 1080px) {
+  .fab {
+    display: none;
+  }
+}
+
+.sidebarAdd {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  width: 100%;
+  height: 44px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-14);
+  font-weight: 500;
+  transition:
+    background-color var(--t-fondo),
+    color var(--t-fondo);
+}
+.sidebarAdd > svg {
+  transition: transform 0.35s var(--ease-spring);
+}
+.sidebarAdd:hover {
+  background: var(--primary-strong);
+  color: var(--on-primary);
+}
+.sidebarAdd:hover > svg {
+  transform: rotate(90deg);
+}
+.sidebarAdd:active {
+  transform: scale(0.97);
+}
+
+/* ---------- List ---------- */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-strong);
+}
+.month {
+  border-bottom: 1px solid var(--border);
+}
+.monthHead {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: var(--space-10);
+  width: 100%;
+  min-height: 60px;
+  padding: var(--space-10) 0;
+  text-align: left;
+  transition: padding var(--t-base) var(--ease-out), background-color var(--t-rapida);
+}
+.monthHead:hover {
+  padding-left: var(--space-6);
+}
+.monthName {
+  font-weight: 380;
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-size: var(--fs-16);
+}
+.monthCount {
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--block);
+  color: var(--text-2);
+  font-size: var(--fs-11);
+  font-weight: 500;
+  line-height: 20px;
+  text-align: center;
+}
+.monthTotal {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+.monthSub {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: var(--fs-12);
+}
+.monthSub > span:last-child:not(:first-child) {
+  font-size: var(--fs-12);
+}
+.monthUsd {
+  font-size: var(--fs-12);
+  font-weight: 400;
+  color: var(--text-2);
+}
+.chev {
+  color: var(--text-2);
+  transition: transform var(--t-base);
+}
+.monthHead[aria-expanded="true"] .chev {
+  transform: rotate(180deg);
+}
+
+/* Accordion: rows collapse with height via grid rows 0fr ↔ 1fr. */
+.collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s var(--ease-out);
+}
+.collapse[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.collapseInner {
+  min-height: 0;
+  overflow: hidden;
+}
+.rows {
+  list-style: none;
+  padding-bottom: var(--space-8);
+}
+.collapse[data-open="true"] .rowItem {
+  animation: rowIn 0.45s var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 25ms);
+}
+@keyframes rowIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+/* A row leaving (deleted) collapses; one just added flashes in. */
+.rowItem {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows 0.35s var(--ease-out),
+    opacity 0.25s ease;
+}
+.rowClip {
+  min-height: 0;
+  overflow: hidden;
+}
+.leaving {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+.fresh .row {
+  animation: flash 1.4s var(--ease-out);
+}
+@keyframes flash {
+  from {
+    background: var(--accent-soft);
+  }
+}
+.row {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  align-items: center;
+  gap: var(--space-12);
+  width: 100%;
+  padding: var(--space-10) 0;
+  text-align: left;
+  border-top: 1px solid var(--border);
+}
+.rowButton {
+  border-radius: 0;
+  transition:
+    background-color var(--t-rapida),
+    padding var(--t-base) var(--ease-out);
+}
+.rowButton:hover {
+  background: var(--block);
+  padding-left: var(--space-8);
+  padding-right: var(--space-8);
+}
+.rowButton:active {
+  background: var(--block-strong);
+}
+.rowIcon {
+  transition: transform var(--t-base) var(--ease-spring);
+}
+.rowButton:hover .rowIcon {
+  transform: scale(1.08);
+}
+.rowIcon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--block);
+  font-size: 16px;
+}
+.rowMain {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.rowTitle {
+  font-size: var(--fs-15);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rowMeta {
+  font-size: var(--fs-12);
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rowAmount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.in {
+  color: var(--up);
+}
+.out {
+  color: var(--down);
+}
+
+.editWrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}

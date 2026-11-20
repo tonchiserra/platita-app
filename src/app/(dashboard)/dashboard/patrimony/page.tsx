@@ -1,238 +1,91 @@
-import { createClient, getUser } from "@/lib/supabase/server";
-import { LazySection } from "@/components/shared/LazySection";
-import { PatrimonyChart, PatrimonyBreakdownChart, AlternativesChart } from "@/components/shared/lazy-charts";
-import {
-  getDolarBlue,
-  getEuroBlue,
-  getDolarBlueHistory,
-  blueRateOn,
-} from "@/lib/api/exchange-rates";
-import { getMonthlyInflation, getUsCpiIndex } from "@/lib/api/inflation";
-import { getCryptoPrices } from "@/lib/api/crypto-prices";
-import { convertToArs } from "@/lib/utils/currency-conversion";
-import { buildTimeline, type TimelineFlow } from "@/lib/utils/patrimony-timeline";
-import { flowsSinceClose } from "@/lib/utils/patrimony-estimate";
-import { tradeIncomes, tradeLossesUsd } from "@/lib/utils/trading";
-import { RETURN_SOURCES } from "@/lib/constants/sources";
-import { PatrimonyPageClient } from "@/components/patrimony/PatrimonyPageClient";
-import type { ExchangeRates, PatrimonySnapshotFull } from "@/types/database";
+import { Suspense } from "react";
+import { Section, Skeleton } from "@/components/ui";
+import { Hero, Equation, closeMeta } from "@/components/dashboard/Hero";
+import { GrowthChart } from "@/components/dashboard/Blocks";
+import { CloseList, NewCloseButton, type CloseRow } from "@/components/patrimony/Closes";
+import { getConverter, getExpenses, getIncomes, getPlatforms, getRates, getSnapshots, getTrades } from "@/lib/data";
+import { allIncomes, buildGrowth, estimatePatrimony } from "@/lib/compute";
+import { currentMonthKey, formatDayMonth, formatMonthName } from "@/lib/utils/format";
+import { closeEndsPreviousMonth } from "@/lib/utils/patrimony-estimate";
 
-export default async function PatrimonyPage() {
-  const [user, supabase] = await Promise.all([getUser(), createClient()]);
+export const metadata = { title: "Patrimonio · Platita" };
 
-  const [
-    { data: platforms },
-    { data: rawSnapshots },
-    dolarBlue,
-    euroBlue,
-    cryptoPrices,
-    { data: rawExpenses },
-    { data: rawManualIncomes },
-    { data: tradeRows },
-    blueSeries,
-    inflationSeries,
-    usCpiSeries,
-  ] = await Promise.all([
-    supabase
-      .from("platforms")
-      .select("*")
-      .eq("user_id", user!.id)
-      .eq("is_active", true)
-      .order("name"),
-    supabase
-      .from("patrimony_snapshots")
-      .select("*, patrimony_snapshot_items(id, snapshot_id, platform_id, currency, amount)")
-      .eq("user_id", user!.id)
-      .order("date", { ascending: false }),
-    getDolarBlue(),
-    getEuroBlue(),
-    getCryptoPrices(),
-    // The "Todo" range needs every flow, not a twelve-month window.
-    supabase
-      .from("expenses")
-      .select("amount, currency, date")
-      .eq("user_id", user!.id),
-    supabase
-      .from("incomes")
-      // `source` is needed to leave investment returns out of the alternatives.
-      .select("amount, currency, date, source")
-      .eq("user_id", user!.id),
-    supabase
-      .from("trades")
-      .select("date, asset, direction, pnl_usd, notes, platform_id")
-      .eq("user_id", user!.id),
-    getDolarBlueHistory(),
-    getMonthlyInflation(120),
-    getUsCpiIndex(),
+export default function PatrimonyPage() {
+  return (
+    <Suspense fallback={<Skeleton height={560} />}>
+      <PatrimonyContent />
+    </Suspense>
+  );
+}
+
+async function PatrimonyContent() {
+  const [{ fx }, snapshots, expenses, incomes, trades, conv, platforms] = await Promise.all([
+    getRates(),
+    getSnapshots(),
+    getExpenses(),
+    getIncomes(),
+    getTrades(),
+    getConverter(),
+    getPlatforms(),
   ]);
+  const current = currentMonthKey();
+  const incomeRows = allIncomes(incomes, trades);
+  const est = estimatePatrimony({ snapshots, incomes: incomeRows, expenses, trades, fx, currentMonth: current });
+  const growth = buildGrowth({ snapshots, incomes: incomeRows, expenses, estimatedArs: est.estimatedArs, conv, history: conv.history, currentMonth: current });
 
-  // Trading profits are income rows like any other, carrying the source that
-  // `RETURN_SOURCES` already excludes from the alternatives — so the filter
-  // below needs no knowledge of trades.
-  const trades = tradeRows ?? [];
-  const rawIncomes = [...(rawManualIncomes ?? []), ...tradeIncomes(trades)];
+  const last = est.lastClose;
+  const heroArs = est.estimatedArs ?? last?.total_ars ?? 0;
+  const change = est.estimatedArs !== null && last && last.total_ars > 0 ? ((est.estimatedArs - last.total_ars) / last.total_ars) * 100 : null;
+  const windowLabel = last && !closeEndsPreviousMonth(last.date, current) ? `desde el cierre del ${formatDayMonth(last.date)}` : `de ${formatMonthName(current)}`;
 
-  const exchangeRates: ExchangeRates = {
-    usdRate: dolarBlue?.venta ?? 0,
-    eurRate: euroBlue?.venta ?? 0,
-    btcUsd: cryptoPrices?.bitcoin?.usd ?? 0,
-    ethUsd: cryptoPrices?.ethereum?.usd ?? 0,
-  };
-
-  const platformMap = Object.fromEntries((platforms ?? []).map((p) => [p.id, p.name]));
-
-  // Map raw snapshots to PatrimonySnapshotFull with platform names
-  interface RawSnapshot {
-    id: string;
-    user_id: string;
-    date: string;
-    total_ars: number;
-    notes: string | null;
-    created_at: string;
-    patrimony_snapshot_items: {
-      id: string;
-      snapshot_id: string;
-      platform_id: string;
-      currency: string;
-      amount: number;
-    }[];
-  }
-
-  const snapshotsWithItems: PatrimonySnapshotFull[] = ((rawSnapshots ?? []) as RawSnapshot[]).map((s) => ({
-    id: s.id,
-    user_id: s.user_id,
-    date: s.date,
-    total_ars: Number(s.total_ars),
-    notes: s.notes,
-    created_at: s.created_at,
-    items: (s.patrimony_snapshot_items ?? []).map((item) => ({
-      id: item.id,
-      snapshot_id: item.snapshot_id,
-      platform_id: item.platform_id,
-      currency: item.currency,
-      amount: Number(item.amount),
-      platform_name: platformMap[item.platform_id] || "Desconocida",
-    })),
-  }));
-
-  // Chart data (ascending for time series)
-  const chartData = [...snapshotsWithItems].reverse().map((s) => ({
-    date: s.date,
-    total_ars: s.total_ars,
-  }));
-
-  // Historical flows are valued at the rate of their own date, not today's.
-  // Only ARS and USD get that treatment because they are the only currencies
-  // with a historical series here; the rest fall back to current rates.
-  const flowToArs = (row: { amount: number; currency: string; date: string }) => {
-    const amount = Number(row.amount);
-    if (row.currency === "ARS") return amount;
-    if (row.currency === "USD" && blueSeries) {
-      const rate = blueRateOn(blueSeries, row.date);
-      if (rate) return amount * rate;
-    }
-    return convertToArs(amount, row.currency, exchangeRates);
-  };
-
-  // Trading losses are deliberately absent from `flows`. The alternatives ask
-  // "what if this money had just sat there", and money sitting in a mattress is
-  // never liquidated — so a loss cannot be charged to the do-nothing scenario,
-  // exactly as its matching profit cannot be credited to it. The symmetry is
-  // load-bearing: charging one side and not the other would bend every line.
-  const flows: TimelineFlow[] = [
-    // Returns on money you already had are income, but not *new* money, so the
-    // alternatives must not be credited with them. See RETURN_SOURCES.
-    ...rawIncomes
-      .filter((row) => !RETURN_SOURCES.has(row.source as string))
-      .map((row) => ({
-        date: row.date as string,
-        amountArs: flowToArs(row),
-        sign: 1 as const,
-      })),
-    ...(rawExpenses ?? []).map((row) => ({
-      date: row.date as string,
-      amountArs: flowToArs(row),
-      sign: -1 as const,
-    })),
-  ];
-
-  // Net worth as of today for the month still open — the same figure the
-  // dashboard headline shows: the last close revalued at current rates, plus
-  // every movement since that close (`flowsSinceClose`). Unlike the
-  // alternatives this counts *every* flow, investment returns included,
-  // because it is real patrimony rather than a counterfactual.
-  const openMonth = new Date().toISOString().slice(0, 7);
-  const lastClose = snapshotsWithItems[0];
-  const lastCloseItems = lastClose?.items ?? [];
-  const since = <T extends { date: string }>(rows: readonly T[]) =>
-    lastClose ? flowsSinceClose(rows, lastClose.date, openMonth) : [];
-  const monthNet =
-    since(rawIncomes)
-      .reduce((sum, row) => sum + flowToArs(row), 0) -
-    since(rawExpenses ?? [])
-      .reduce((sum, row) => sum + flowToArs(row), 0) -
-    // Not a gasto, so it is in no expense row — but the money did leave a
-    // balance the last close counted, so the estimate has to lose it too.
-    // Converted at today's rate, like the close it is being subtracted from,
-    // rather than at the rate of each operation's own date.
-    convertToArs(tradeLossesUsd(since(trades)), "USD", exchangeRates);
-
-  const estimatedCurrentArs =
-    lastCloseItems.length > 0
-      ? lastCloseItems.reduce(
-          (sum, item) => sum + convertToArs(item.amount, item.currency, exchangeRates),
-          0
-        ) + monthNet
-      : null;
-
-  const timeline = buildTimeline({
-    snapshots: chartData.map((s) => ({ date: s.date, totalArs: s.total_ars })),
-    flows,
-    blueSeries,
-    inflationSeries,
-    usCpiSeries,
-    estimatedCurrentArs,
-    currentMonth: openMonth,
+  const formPlatforms = platforms.map((p) => ({ id: p.id, name: p.name, default_currency: p.default_currency }));
+  const activePlatforms = platforms.filter((p) => p.is_active).map((p) => ({ id: p.id, name: p.name, default_currency: p.default_currency }));
+  const closes: CloseRow[] = [...snapshots].reverse().map((sn) => {
+    const rate = conv.blue(sn.date);
+    return {
+      id: sn.id,
+      date: sn.date,
+      notes: sn.notes,
+      items: sn.items.map((i) => ({ platform_id: i.platform_id, currency: i.currency, amount: i.amount })),
+      total_ars: sn.total_ars,
+      total_usd: rate > 0 ? sn.total_ars / rate : null,
+    };
   });
 
-  // Breakdown data from latest snapshot
-  const latestItems = snapshotsWithItems[0]?.items ?? [];
-  const platformTotals = new Map<string, number>();
-
-  for (const item of latestItems) {
-    const arsValue = convertToArs(item.amount, item.currency, exchangeRates);
-    platformTotals.set(
-      item.platform_id,
-      (platformTotals.get(item.platform_id) ?? 0) + arsValue
-    );
-  }
-
-  const totalArs = [...platformTotals.values()].reduce((s, v) => s + v, 0);
-  const breakdownData = [...platformTotals.entries()]
-    .map(([id, valueArs]) => ({
-      platform: platformMap[id] || "Desconocida",
-      valueArs,
-      percentage: totalArs > 0 ? (valueArs / totalArs) * 100 : 0,
-    }))
-    .sort((a, b) => b.valueArs - a.valueArs);
-
   return (
-    <PatrimonyPageClient
-      snapshots={snapshotsWithItems}
-      platforms={platforms ?? []}
-      exchangeRates={exchangeRates}
-    >
-      <LazySection minHeight="300px">
-        <PatrimonyChart data={chartData} />
-      </LazySection>
-      <LazySection minHeight="380px">
-        <AlternativesChart points={timeline} />
-      </LazySection>
-      {breakdownData.length > 0 && (
-        <LazySection minHeight="300px">
-          <PatrimonyBreakdownChart data={breakdownData} totalArs={totalArs} />
-        </LazySection>
-      )}
-    </PatrimonyPageClient>
+    <>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <Hero
+          label={est.estimatedArs !== null ? "Patrimonio estimado" : "Patrimonio"}
+          shareName="hero-figure"
+          ars={heroArs}
+          usd={fx.usdRate > 0 ? heroArs / fx.usdRate : null}
+          change={change}
+          changeLabel="desde el último cierre"
+          meta={last ? closeMeta(last.date, last.total_ars) : undefined}
+        />
+        {est.estimatedArs !== null && (
+          <Equation
+            byCurrency={est.byCurrency}
+            fx={fx}
+            sinceIncomesArs={est.sinceIncomesArs}
+            sinceExpensesArs={est.sinceExpensesArs}
+            sinceLossesArs={est.sinceLossesArs}
+            windowLabel={windowLabel}
+            totalArs={est.estimatedArs}
+          />
+        )}
+      </div>
+
+      <GrowthChart growth={growth} current={current} />
+
+      <Section
+        label="Cierres"
+        title="Tus fotos de fin de mes"
+        aside={<NewCloseButton platforms={activePlatforms} fx={fx} base={closes[0]} />}
+      >
+        <CloseList closes={closes} platforms={formPlatforms} fx={fx} />
+      </Section>
+    </>
   );
 }

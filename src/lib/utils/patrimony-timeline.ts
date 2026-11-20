@@ -1,6 +1,17 @@
 import { blueRateOn, type DolarHistoryPoint } from "@/lib/api/exchange-rates";
-import type { CpiIndexPoint, InflationPoint } from "@/lib/api/inflation";
 import type { TimelinePoint } from "./patrimony-alternatives";
+
+/** Monthly CPI, `fecha` at month end, `valor` already a percentage. Optional input. */
+export interface InflationPoint {
+  fecha: string;
+  valor: number;
+}
+
+/** US CPI-U index level for a `YYYY-MM`. Optional input. */
+export interface CpiIndexPoint {
+  month: string;
+  index: number;
+}
 
 /** A single income or expense, already converted to ARS. `sign` is +1 or -1. */
 export interface TimelineFlow {

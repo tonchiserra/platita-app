@@ -1,31 +1,31 @@
-import { VStack, Heading } from "@chakra-ui/react";
-import { createClient, getUser } from "@/lib/supabase/server";
-import { AccountSettings } from "@/components/settings/AccountSettings";
-import { PlatformManager } from "@/components/settings/PlatformManager";
-import { CategoryManager } from "@/components/settings/CategoryManager";
+import { Section } from "@/components/ui";
+import { AccountSettings, CategoryManager, PlatformManager } from "@/components/settings/SettingsClient";
 import { DataTransfer } from "@/components/settings/DataTransfer";
+import { getCategoryRows, getPlatforms, getSession } from "@/lib/data";
+import s from "@/components/settings/settings.module.css";
+
+export const metadata = { title: "Ajustes · Platita" };
 
 export default async function SettingsPage() {
-  const [user, supabase] = await Promise.all([getUser(), createClient()]);
-
-  const [{ data: platforms }, { data: categories }] = await Promise.all([
-    supabase.from("platforms").select("*").eq("user_id", user!.id).order("name"),
-    supabase
-      .from("expense_categories")
-      .select("*")
-      .eq("user_id", user!.id)
-      .order("sort_order"),
-  ]);
+  const [{ user }, platforms, categories] = await Promise.all([getSession(), getPlatforms(), getCategoryRows()]);
 
   return (
-    <VStack gap="8" align="stretch">
-      <Heading size="lg" color="fg.heading">
-        Ajustes
-      </Heading>
-      <AccountSettings email={user!.email} />
-      <PlatformManager platforms={platforms ?? []} />
-      <CategoryManager categories={categories ?? []} />
-      <DataTransfer />
-    </VStack>
+    <>
+      <h1 className="h1">Ajustes</h1>
+      <div className={s.groups}>
+        <Section label="Vos" title="Cuenta">
+          <AccountSettings email={user.email} />
+        </Section>
+        <Section label="Cuentas" title="Plataformas">
+          <PlatformManager platforms={platforms} />
+        </Section>
+        <Section label="Gastos" title="Categorías">
+          <CategoryManager categories={categories} />
+        </Section>
+        <Section label="Respaldo" title="Tus datos">
+          <DataTransfer />
+        </Section>
+      </div>
+    </>
   );
 }

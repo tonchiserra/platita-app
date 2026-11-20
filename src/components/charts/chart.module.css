@@ -1,0 +1,572 @@
+/*
+ * Charts are static SVG rendered on the server. X coordinates are percentages,
+ * so a chart fits any width with no measuring; Y is in pixels on a fixed
+ * height. Line paths live in a stretched viewBox with non-scaling strokes.
+ * Hover and tap readouts are CSS (:hover / :focus) on one column per month.
+ */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  padding: var(--space-20);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--chart-surface);
+  min-width: 0;
+}
+@media (max-width: 480px) {
+  .card {
+    padding: var(--space-16) var(--space-14);
+  }
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+}
+.titles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.title {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 380;
+  font-size: var(--fs-18);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--ls-titular);
+}
+.subtitle {
+  font-size: var(--fs-13);
+  color: var(--text-2);
+}
+.controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6) var(--space-16);
+  font-size: var(--fs-13);
+  color: var(--text-2);
+}
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+.keyRect {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+}
+.keyLine {
+  width: 14px;
+  height: 0;
+  border-top: 2px solid;
+  flex: none;
+}
+.keyDash {
+  border-top-style: dashed;
+}
+
+/* ---------- Plot ---------- */
+
+.chart {
+  position: relative;
+  padding-left: 46px;
+}
+.plot {
+  position: relative;
+}
+.yTick {
+  position: absolute;
+  left: -46px;
+  width: 40px;
+  text-align: right;
+  transform: translateY(-50%);
+  font-size: var(--fs-11);
+  line-height: 1;
+  color: var(--chart-axis);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.grid line {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+.grid,
+.yTick,
+.xTick {
+  animation: fade 0.5s ease both;
+}
+
+/* ---------- Chart motion: draws on arrival, and again when a view is shown ---------- */
+/* A view hidden with display:none restarts these when it reappears, so switching
+   ARS/USD, "vs. dolarizado" or the range redraws the chart. */
+.bar {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: bar-grow var(--t-chart) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 35ms);
+  transition: opacity var(--t-rapida);
+}
+@keyframes bar-grow {
+  from {
+    transform: scaleY(0);
+  }
+}
+.lineLayer {
+  animation: line-draw 1.1s var(--ease-out) both;
+}
+@keyframes line-draw {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+.area {
+  animation: fade 0.9s ease 0.3s both;
+}
+.dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pop 0.45s var(--ease-spring) 0.9s both;
+}
+.card {
+  transition: border-color var(--t-base), box-shadow var(--t-base);
+}
+.card:hover {
+  border-color: var(--border-strong);
+}
+.baseline {
+  stroke: var(--border-strong) !important;
+}
+
+.xAxis {
+  position: relative;
+  height: 22px;
+  margin-top: 6px;
+}
+.xTick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: var(--fs-11);
+  color: var(--chart-axis);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.xTickCurrent {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* ---------- Hover columns & readout ---------- */
+
+.cols {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+.col {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  outline: none;
+  cursor: default;
+  -webkit-tap-highlight-color: transparent;
+}
+.col::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity var(--t-rapida);
+}
+.colLine::before {
+  inset: 0 auto 0 50%;
+  width: 1px;
+  border-radius: 0;
+}
+.col:hover::before {
+  opacity: 0.05;
+}
+.colLine:hover::before {
+  opacity: 0.35;
+}
+.col:focus-visible::before {
+  opacity: 0.1;
+  outline: 1.5px solid var(--accent);
+  outline-offset: -1.5px;
+}
+.colLine:focus-visible::before {
+  opacity: 0.6;
+  outline: 0;
+}
+
+.tip {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  z-index: 5;
+  min-width: 168px;
+  max-width: 240px;
+  padding: var(--space-10) var(--space-12);
+  border-radius: var(--radius-int);
+  border: 1px solid var(--tip-border);
+  background: var(--tip-bg);
+  color: var(--tip-text);
+  box-shadow: 0 10px 30px -10px rgba(35, 31, 32, 0.25);
+  font-size: var(--fs-12);
+  line-height: 1.35;
+  transform: translate(-50%, 4px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity var(--t-rapida),
+    transform var(--t-rapida),
+    visibility 0s linear var(--t-rapida);
+}
+
+.tipStart {
+  left: 0;
+  transform: translate(0, 4px);
+}
+.tipEnd {
+  left: auto;
+  right: 0;
+  transform: translate(0, 4px);
+}
+.col:hover .tip,
+.col:focus .tip,
+.col:focus-within .tip {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  transition:
+    opacity var(--t-rapida),
+    transform var(--t-rapida),
+    visibility 0s;
+}
+.col:hover .tipStart,
+.col:focus .tipStart,
+.col:hover .tipEnd,
+.col:focus .tipEnd {
+  transform: translate(0, 0);
+}
+.tipTitle {
+  margin-bottom: var(--space-6);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-etiqueta);
+  color: var(--text-2);
+}
+.tipRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+.tipRow + .tipRow {
+  margin-top: 2px;
+}
+.tipName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  color: var(--text-2);
+}
+
+.tipValue {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tipSep {
+  height: 1px;
+  margin: var(--space-6) 0;
+  background: currentColor;
+  opacity: 0.2;
+}
+.tipNote {
+  margin-top: var(--space-6);
+  opacity: 0.65;
+  font-size: var(--fs-11);
+}
+
+/* ---------- Table view (the relief channel: every value without hovering) ---------- */
+
+.details {
+  font-size: var(--fs-13);
+}
+.details summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  color: var(--text-2);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.details summary::-webkit-details-marker {
+  display: none;
+}
+.details summary::after {
+  content: "+";
+  display: inline-block;
+  transition: transform var(--t-base);
+}
+.details[open] summary::after {
+  transform: rotate(45deg);
+}
+.details summary:hover {
+  color: var(--text);
+}
+.tableWrap {
+  margin-top: var(--space-12);
+  max-height: 320px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.table th,
+.table td {
+  padding: var(--space-8) var(--space-6);
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.table th:first-child,
+.table td:first-child {
+  text-align: left;
+}
+.table th {
+  position: sticky;
+  top: 0;
+  background: var(--chart-surface);
+  font-weight: 500;
+  font-size: var(--fs-11);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-etiqueta);
+  color: var(--text-2);
+}
+
+/* ---------- Toggle chip ("vs. dolarizado") ---------- */
+
+.toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: 30px;
+  padding: 0 var(--space-12);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-12);
+  font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    background-color var(--t-base),
+    color var(--t-base),
+    border-color var(--t-base);
+  user-select: none;
+}
+.toggle input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  cursor: pointer;
+}
+.toggle:has(input:checked) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.toggle:has(input:focus-visible) {
+  outline: var(--focus-width) solid var(--focus-color);
+  outline-offset: 2px;
+}
+.toggleDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--chart-line-2);
+}
+
+.cardWithToggle:not(:has(.toggle input:checked)) [data-toggle-view="on"],
+.cardWithToggle:has(.toggle input:checked) [data-toggle-view="off"] {
+  display: none;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+}
+.note {
+  font-size: var(--fs-12);
+  color: var(--text-3);
+}
+
+/* ---------- Donut ---------- */
+
+.donutWrap {
+  display: grid;
+  grid-template-columns: 168px 1fr;
+  gap: var(--space-24);
+  align-items: center;
+}
+@media (max-width: 520px) {
+  .donutWrap {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+}
+.donut {
+  position: relative;
+  width: 168px;
+  height: 168px;
+}
+.donut svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  animation: donut-in 0.9s var(--ease-out) both;
+}
+@keyframes donut-in {
+  from {
+    opacity: 0;
+    transform: rotate(-110deg) scale(0.86);
+  }
+}
+.donutSeg {
+  transition: opacity var(--t-base), stroke-width var(--t-base) var(--ease-out);
+  animation: fade 0.5s ease both;
+  animation-delay: calc(0.15s + var(--i, 0) * 60ms);
+}
+.donutSeg:hover {
+  stroke-width: 26;
+}
+.donutCenter {
+  animation: fade 0.5s ease 0.35s both;
+}
+.donutCenter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+.donutTotal {
+  font-family: var(--font-cifra);
+  font-weight: var(--fw-cifra);
+  font-size: var(--fs-20);
+  line-height: 1.1;
+}
+.donutLabel {
+  font-size: var(--fs-11);
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-etiqueta);
+}
+.rank {
+  width: 100%;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.rankRow {
+  animation: rise 0.45s var(--ease-out) both;
+  animation-delay: calc(0.1s + var(--i, 0) * 45ms);
+  display: grid;
+  grid-template-columns: 12px 1fr auto auto;
+  align-items: center;
+  gap: var(--space-10);
+  padding: var(--space-8) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-14);
+}
+.rankRow:last-child {
+  border-bottom: 0;
+}
+.rankName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rankValue {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.rankPct {
+  width: 48px;
+  text-align: right;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
+}
+
+.monthNav {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.monthLabel {
+  animation: fade 0.35s ease both;
+  min-width: 112px;
+  text-align: center;
+  font-size: var(--fs-14);
+  font-weight: 500;
+}
+
+.emptyPlot {
+  display: grid;
+  place-items: center;
+  height: 180px;
+  border-radius: var(--radius-int);
+  background: var(--block);
+  color: var(--text-2);
+  font-size: var(--fs-14);
+  text-align: center;
+  padding: var(--space-16);
+}

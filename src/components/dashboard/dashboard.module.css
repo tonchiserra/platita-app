@@ -1,0 +1,322 @@
+/* ---------- Hero ---------- */
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-14);
+}
+.heroFigure {
+  font-family: var(--font-cifra);
+  font-weight: var(--fw-cifra);
+  font-size: var(--fs-cifra);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.heroSub {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-14);
+  font-size: var(--fs-15);
+}
+.pillIn {
+  animation: rise 0.5s var(--ease-out) 0.15s both;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: 32px;
+  padding: 0 var(--space-12);
+  border-radius: var(--radius-pill);
+  background: var(--block);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+.heroMeta {
+  font-size: var(--fs-13);
+  color: var(--text-2);
+  animation: fade 0.5s ease 0.25s both;
+}
+.heroFigure {
+  animation: rise 0.6s var(--ease-out) both;
+  transition: color var(--t-fondo);
+}
+.heroUp {
+  color: var(--up);
+}
+.heroDown {
+  color: var(--down);
+}
+
+/* ---------- Equation ---------- */
+.equation {
+  border-top: 1px solid var(--border-strong);
+  padding-top: var(--space-4);
+}
+.equation summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--fs-12);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-etiqueta);
+}
+.equation summary::-webkit-details-marker {
+  display: none;
+}
+.equation summary::after {
+  content: "+";
+  font-size: 20px;
+  font-weight: 300;
+  transition: transform var(--t-base);
+}
+.equation[open] summary::after {
+  transform: rotate(45deg);
+}
+.terms {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--space-8);
+}
+.term {
+  transition: background-color var(--t-rapida);
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: baseline;
+  gap: var(--space-8);
+  padding: var(--space-8) 0;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+  animation: settle 0.35s var(--ease-reveal) both;
+}
+.term:nth-child(2) { animation-delay: 0.04s; }
+.term:nth-child(3) { animation-delay: 0.08s; }
+.term:nth-child(4) { animation-delay: 0.12s; }
+.term:nth-child(5) { animation-delay: 0.16s; }
+.term:nth-child(n + 6) { animation-delay: 0.2s; }
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+}
+.op {
+  color: var(--text-2);
+  font-size: var(--fs-16);
+}
+.termMain {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.termChain {
+  font-size: var(--fs-12);
+  color: var(--text-2);
+}
+.termValue {
+  font-weight: 500;
+  white-space: nowrap;
+}
+.termTotal {
+  border-bottom: 0;
+  border-top: 1px solid var(--border-strong);
+  font-weight: 500;
+}
+
+/* ---------- Month summary: three info boxes ---------- */
+.summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-12);
+}
+@media (max-width: 640px) {
+  .summary {
+    grid-template-columns: 1fr 1fr;
+  }
+  .summary > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+  animation: rise 0.55s var(--ease-out) both;
+  transition: transform var(--t-base) var(--ease-out), background-color var(--t-fondo);
+}
+.stat:nth-child(2) { animation-delay: 0.07s; }
+.stat:nth-child(3) { animation-delay: 0.14s; }
+.stat:hover {
+  transform: translateY(-2px);
+}
+.statLabel {
+  font-size: var(--fs-12);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-etiqueta);
+  color: var(--text-2);
+}
+.statValue {
+  font-family: var(--font-cifra);
+  font-weight: var(--fw-cifra);
+  font-size: clamp(22px, 5vw, 30px);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.statUsd {
+  font-size: var(--fs-13);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.statNote {
+  font-size: var(--fs-12);
+  color: var(--text-2);
+}
+
+/* ---------- Cotizaciones: black ingredient-card tiles ---------- */
+.rates {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-12);
+}
+@media (max-width: 860px) {
+  .rates {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.rate {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-20);
+  min-height: 148px;
+  padding: var(--space-16);
+  border-radius: var(--radius-card);
+  background: var(--block);
+  color: var(--text);
+  transition:
+    background-color var(--t-fondo),
+    color var(--t-fondo),
+    transform var(--t-base) var(--ease-out);
+}
+
+.rate {
+  animation: rise 0.55s var(--ease-out) both;
+}
+.rate:nth-child(2) { animation-delay: 0.06s; }
+.rate:nth-child(3) { animation-delay: 0.12s; }
+.rate:nth-child(4) { animation-delay: 0.18s; }
+.rate:hover {
+  background: var(--accent-soft);
+  transform: translateY(-3px);
+}
+.rateHead {
+  color: var(--text-2);
+}
+.rateHead {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-8);
+  font-size: var(--fs-11);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-etiqueta);
+}
+.rateFigure {
+  font-family: var(--font-cifra);
+  font-weight: var(--fw-cifra);
+  font-size: clamp(20px, 5.4vw, 34px);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.rateFoot {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-8);
+  font-size: var(--fs-12);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.ratesNote {
+  font-size: var(--fs-12);
+  color: var(--text-3);
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-16);
+}
+@media (max-width: 900px) {
+  .grid2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Month flow bar: spent vs. kept, as on the legacy home ---------- */
+.flow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+  animation: rise 0.55s var(--ease-out) 0.2s both;
+}
+.flowBar {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--block);
+  animation: flow-reveal 1s var(--ease-out) 0.35s both;
+}
+@keyframes flow-reveal {
+  from {
+    clip-path: inset(0 100% 0 0 round 4px);
+  }
+  to {
+    clip-path: inset(0 0 0 0 round 4px);
+  }
+}
+.flowSpent,
+.flowKept {
+  display: block;
+  height: 100%;
+  transition: width 0.6s var(--ease-out);
+}
+.flowSpent {
+  background: var(--chart-expense);
+}
+.flowKept {
+  background: var(--chart-income);
+}
+.flowLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6) var(--space-16);
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
+}
+.flowItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+.flowKey {
+  width: 3px;
+  height: 12px;
+  border-radius: 1px;
+  flex: none;
+}
+.flowOut {
+  color: var(--down);
+}
+.flowIn {
+  color: var(--up);
+}

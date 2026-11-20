@@ -13,7 +13,7 @@ const data: BackupData = {
   expenses: [{ date: "2026-01-01", amount: 45000.5, currency: "ARS", category: "Food", description: 'Súper "raro"; con ; y ,', platform: "Brubank" },
              { date: "2026-08-02", amount: 12.34, currency: "USD", category: "Subscriptions", description: "", platform: null }],
   incomes: [{ date: "2026-08-05", amount: 500, currency: "USD", source: "Salary", description: "", platform: "Brubank" }],
-  investments: [{ date: "2026-08-07", asset: "BTC", asset_type: "crypto", units: 0.01, price_per_unit: 65000, total_amount: 650, currency: "USD", platform: "Lemon", notes: null }],
+  investments: [{ date: "2026-08-07", asset: "BTC", asset_type: "crypto", side: "buy", units: 0.01, price_per_unit: 65000, total_amount: 650, currency: "USD", platform: "Lemon", notes: null }],
   // Both signs, because the sign is the one thing this column has to survive.
   trades: [{ date: "2026-08-19", asset: "BTC", direction: "long", pnl_usd: 420.5, pnl_pct: 12.4, leverage: 10, platform: "Lemon", notes: "Breakout post-FOMC" },
            { date: "2026-08-14", asset: "ETH", direction: "short", pnl_usd: -150, pnl_pct: -6.8, leverage: null, platform: null, notes: null }],

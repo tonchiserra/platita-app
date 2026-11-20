@@ -77,6 +77,8 @@ export const COLUMNS: Record<SheetKey, ColumnDef[]> = {
     { key: "currency", header: "moneda", type: "text", width: 10 },
     { key: "platform", header: "plataforma", type: "text", width: 22, optional: true },
     { key: "notes", header: "notas", type: "text", width: 30, optional: true },
+    // Last and optional, so files exported before sales existed still import: blank is a purchase.
+    { key: "side", header: "operación", type: "text", width: 12, optional: true },
   ],
   trades: [
     { key: "date", header: "fecha", type: "date", width: 14 },
@@ -151,6 +153,8 @@ export interface BackupInvestment {
   date: string;
   asset: string;
   asset_type: string;
+  /** `compra` / `venta` in the sheet. */
+  side: "buy" | "sell";
   units: number;
   price_per_unit: number;
   total_amount: number;
@@ -239,6 +243,8 @@ export function sheetRows(sheet: SheetKey, data: BackupData): CellValue[][] {
       const value = record[column.key];
       if (value === undefined || value === null) return null;
       if (column.type === "date") return isoToUtcDate(String(value));
+      // Stored in English like every enum here, but the sheet is read by a person.
+      if (sheet === "investments" && column.key === "side") return value === "sell" ? "venta" : "compra";
       return value as CellValue;
     })
   );
@@ -303,6 +309,7 @@ export const INSTRUCTIONS: string[][] = [
   ["", "Tipo de plataforma", PLATFORM_TYPES.join(", ")],
   ["", "", PLATFORM_TYPES.map((type) => PLATFORM_TYPE_LABELS[type]).join(", ")],
   ["", "Tipo de activo", ASSET_TYPES.join(", ")],
+  ["", "Operación de inversión", "compra, venta (vacío = compra)"],
   ["", "Tipo de operación", "long, short"],
   ["", "Categoría y fuente", "Texto libre. Usá los mismos nombres que ves en la app."],
 ];
@@ -637,10 +644,16 @@ export function parseBackupWorkbook(sheets: RawSheet[]): ParseResult {
     // Same derivation the investment form uses, so a blank cell behaves as if
     // the row had been typed into the app.
     const units = readNumber(cell("investments", row, "unidades")) ?? (price > 0 ? total / price : 0);
+    const sideText = normalise(cell("investments", row, "operación")).toLowerCase();
+    if (sideText && !["compra", "venta", "buy", "sell"].includes(sideText)) {
+      add("investments", line, `Operación «${sideText}» inválida. Válidas: compra, venta.`);
+      continue;
+    }
     data.investments.push({
       date,
       asset,
       asset_type: assetType,
+      side: sideText === "venta" || sideText === "sell" ? "sell" : "buy",
       units,
       price_per_unit: price,
       total_amount: total,

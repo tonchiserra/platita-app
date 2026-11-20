@@ -1,33 +1,154 @@
+@import "../styles/tokens.css";
+@import "../styles/motion.css";
+
 *,
 *::before,
 *::after {
   box-sizing: border-box;
   margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  background: var(--bg);
 }
 
 body {
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-texto);
+  font-size: var(--fs-16);
+  line-height: var(--lh-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color var(--t-fondo), color var(--t-fondo);
 }
 
-/* Money is scanned in columns. Anywhere digits stack, they must not reflow. */
-[data-num],
-[data-num] * {
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+img,
+svg {
+  display: block;
+}
+
+:focus-visible {
+  outline: var(--focus-width) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* Theme and "ocultar montos" switch through a view transition: a quick cross-fade. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-timing-function: var(--ease-out);
+}
+
+/* Scrollbar from the kit: 6px, warm grey thumb. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+/* ---------- Type roles (UI Kit) ---------- */
+
+/* Titulares: MaisonExt Book in the kit → Mona Sans, expanded. */
+.h1,
+.h2,
+.h3 {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 400;
+  letter-spacing: var(--ls-titular);
+  color: var(--text);
+}
+.h1 {
+  font-size: var(--fs-titular-m);
+  line-height: 0.95;
+}
+.h2 {
+  font-size: var(--fs-titular-s);
+  line-height: 1;
+}
+.h3 {
+  font-size: var(--fs-20);
+  font-weight: 380;
+  line-height: var(--lh-tight);
+}
+
+/* Rótulo: 12px 500 uppercase, tracked. */
+.rotulo {
+  font-size: var(--fs-12);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-etiqueta);
+  color: var(--text-2);
+}
+
+/* Key figures: bold, at normal width. */
+.cifra {
+  font-family: var(--font-cifra);
+  font-weight: var(--fw-cifra);
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+/* Columns of money must not reflow. */
+.num,
+[data-num] {
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
 }
 
-/* The patrimony equation settles top to bottom, the way you'd write it out. */
-@keyframes platita-settle {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+.muted {
+  color: var(--text-2);
 }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- Money visibility ----------
+ * Pure CSS, so a Server Component can render an amount: the inline script in
+ * the root layout sets `data-money="hidden"` before first paint, and the value
+ * leaves both the screen and the accessibility tree. */
+.money-mask {
+  display: none;
+}
+html[data-money="hidden"] .money-value {
+  display: none;
+}
+html[data-money="hidden"] .money-mask {
+  display: inline;
+}
+
+
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -35,6 +156,7 @@ body {
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    animation-delay: 0s !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }

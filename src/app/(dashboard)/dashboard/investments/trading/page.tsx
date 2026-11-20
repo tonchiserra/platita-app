@@ -1,78 +1,93 @@
-import { VStack } from "@chakra-ui/react";
-import { createClient, getUser } from "@/lib/supabase/server";
-import { TradeForm } from "@/components/investments/TradeForm";
-import { TradeList } from "@/components/investments/TradeList";
-import { TradeStats } from "@/components/investments/TradeStats";
-import { LazySection } from "@/components/shared/LazySection";
-import { TradePnlChart } from "@/components/shared/lazy-charts";
-import { tradePnlByMonth, tradeStats } from "@/lib/utils/trading";
-import type { TradeWithPlatform } from "@/types/database";
+import { Suspense } from "react";
+import { Box, Money, Section, Skeleton } from "@/components/ui";
+import { Hero } from "@/components/dashboard/Hero";
+import { ChartCard, ChartTable, LineChart, chartVars } from "@/components/charts/Charts";
+import { NewTradeButton, TradeList } from "@/components/investments/TradeClient";
+import { getPlatforms, getTrades } from "@/lib/data";
+import { tradeStats } from "@/lib/utils/trading";
+import { currentMonthKey, formatMonthName, formatPercent, monthRange } from "@/lib/utils/format";
+import s from "@/components/investments/investments.module.css";
 
-function formatMonthLabel(key: string) {
-  const d = new Date(`${key}-01T00:00:00`);
-  return d.toLocaleDateString("es-AR", { month: "short", year: "2-digit" });
-}
+export const metadata = { title: "Trading · Platita" };
 
 /**
- * The trading book.
- *
- * Everything here is in USD, like the rest of Inversiones — it is the one
- * section that does not normalise to pesos, and the PnL already arrives in
- * dollars. The profits' effect on income and the losses' effect on the estimated
- * patrimony are computed by the pages that own those figures, not here.
+ * The trading book, in USD like the PnL it records. Its profits reach the
+ * income figures and its losses the estimated patrimony through the pages that
+ * own those numbers, not through anything here.
  */
-export default async function TradingPage() {
-  const [user, supabase] = await Promise.all([getUser(), createClient()]);
+export default function TradingPage() {
+  return (
+    <Suspense fallback={<Skeleton height={480} />}>
+      <TradingContent />
+    </Suspense>
+  );
+}
 
-  const [{ data: platforms }, { data: trades }] = await Promise.all([
-    supabase
-      .from("platforms")
-      .select("*")
-      .eq("user_id", user!.id)
-      .eq("is_active", true)
-      .order("name"),
-    supabase
-      .from("trades")
-      .select("*, platform:platforms(*)")
-      .eq("user_id", user!.id)
-      .order("date", { ascending: false }),
-  ]);
+async function TradingContent() {
+  const [trades, platforms] = await Promise.all([getTrades(), getPlatforms()]);
+  const current = currentMonthKey();
+  const month = tradeStats(trades, current);
+  const all = tradeStats(trades);
+  const platformOptions = platforms.filter((p) => p.is_active).map((p) => ({ id: p.id, name: p.name }));
 
-  // A null here is migration 003 not being applied yet, which reads as an empty
-  // book rather than a broken page.
-  const book = (trades ?? []) as TradeWithPlatform[];
-
-  const now = new Date();
-  const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const monthLabel = now.toLocaleDateString("es-AR", { month: "long" });
-
-  const monthStats = tradeStats(book, curMonth);
-  const allTimeStats = tradeStats(book);
-
-  const byMonth = tradePnlByMonth(book);
-  const chartData = byMonth.map((row) => ({
-    label: formatMonthLabel(row.month),
-    net: row.net,
-    wins: row.wins,
-    losses: row.losses,
-  }));
+  // Running result, one point per calendar month since the first operation.
+  const months = all.firstMonth ? monthRange(all.firstMonth, current) : [];
+  const netByMonth = new Map<string, number>();
+  for (const t of trades) netByMonth.set(t.date.slice(0, 7), (netByMonth.get(t.date.slice(0, 7)) ?? 0) + t.pnl_usd);
+  const usd: number[] = [];
+  for (const m of months) usd.push((usd[usd.length - 1] ?? 0) + (netByMonth.get(m) ?? 0));
+  // Dollars only: the peso side of the series is deliberately empty.
+  const series = { usd, ars: usd.map(() => null) };
 
   return (
-    <VStack gap="6" align="stretch">
-      <TradeForm platforms={platforms ?? []} />
-      {book.length > 0 && (
-        <TradeStats month={monthStats} allTime={allTimeStats} monthLabel={monthLabel} />
+    <>
+      {trades.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Trading is always in dollars, the unit its results are entered in — never pesos. */}
+          <Hero label="Resultado acumulado" lead="USD" usd={all.net} ars={null} bySign />
+          <div className={s.summary}>
+            <Box tone={month.net >= 0 ? "up" : "down"} className={s.stat}>
+              <span className={s.statLabel}>Resultado de {formatMonthName(current)}</span>
+              <Money className={s.statValue} value={month.net} currency="USD" signed />
+              <span className={s.statSub}>
+                {month.wins} ganadas · {month.losses} perdidas
+              </span>
+            </Box>
+            <Box tone="grey" className={s.stat}>
+              <span className={s.statLabel}>Tasa de acierto</span>
+              <span className={s.statValue}>{all.winRate !== null ? formatPercent(all.winRate, { signed: false, decimals: 0 }) : "—"}</span>
+              <span className={s.statSub}>
+                {all.wins} de {all.wins + all.losses} operaciones
+              </span>
+            </Box>
+            <Box tone="grey" className={s.stat}>
+              <span className={s.statLabel}>Operaciones</span>
+              <span className={s.statValue}>{trades.length}</span>
+              <span className={s.statSub}>desde {all.firstMonth ? formatMonthName(all.firstMonth) : "—"}</span>
+            </Box>
+          </div>
+        </div>
       )}
-      {/* From the first month, not the second: a one-bar chart is thin, but a
-          chart that silently is not there reads as broken. */}
-      {chartData.length > 0 && (
-        <LazySection minHeight="380px">
-          <TradePnlChart data={chartData} total={allTimeStats.net} />
-        </LazySection>
+
+      {months.length > 0 && (
+        <ChartCard
+          title="Resultado acumulado"
+          subtitle="Ganancias menos pérdidas, sumadas mes a mes."
+          table={<ChartTable currency="USD" months={months} columns={[{ label: "Acumulado", values: series }]} />}
+          note="En dólares, como se cargan los resultados."
+        >
+          <LineChart
+            currency="USD"
+            months={months}
+            current={current}
+            series={[{ key: "net", label: "Acumulado", color: chartVars.line, values: series, area: true, bySign: true }]}
+          />
+        </ChartCard>
       )}
-      <LazySection minHeight="200px">
-        <TradeList trades={book} />
-      </LazySection>
-    </VStack>
+
+      <Section label="Libro" title="Operaciones cerradas" aside={<NewTradeButton platforms={platformOptions} />}>
+        <TradeList trades={trades} platforms={platformOptions} />
+      </Section>
+    </>
   );
 }

@@ -1,112 +1,103 @@
-import { VStack, Heading, SimpleGrid } from "@chakra-ui/react";
-import { createClient, getUser } from "@/lib/supabase/server";
-import { ExpenseForm } from "@/components/expenses/ExpenseForm";
-import { ExpenseList } from "@/components/expenses/ExpenseList";
-import { LazySection } from "@/components/shared/LazySection";
-import { ExpenseCategoryChart, ExpenseTrendChart } from "@/components/shared/lazy-charts";
-import { getDolarBlue } from "@/lib/api/exchange-rates";
-import { resolveCategories, iconMap } from "@/lib/utils/expense-categories";
+import { Suspense } from "react";
+import { Section, Skeleton } from "@/components/ui";
+import { Hero } from "@/components/dashboard/Hero";
+import { BarChart, ChartCard, ChartTable, chartVars } from "@/components/charts/Charts";
+import { MonthlyDonut, type DonutMonth } from "@/components/charts/MonthlyDonut";
+import { MovementList } from "@/components/movements/MovementList";
+import { groupByMonth } from "@/components/movements/groups";
+import { getCategories, getConverter, getExpenses, getPlatforms } from "@/lib/data";
+import { monthlySums, windowMonths } from "@/lib/compute";
+import { categoryLabel } from "@/lib/constants/labels";
+import { addMonths, currentMonthKey, formatMonthName } from "@/lib/utils/format";
 
-function buildMonthKey(date: string) {
-  return date.slice(0, 7);
+export const metadata = { title: "Gastos · Platita" };
+
+export default function ExpensesPage() {
+  return (
+    <Suspense fallback={<Skeleton height={520} />}>
+      <ExpensesContent />
+    </Suspense>
+  );
 }
 
-function formatMonthLabel(key: string) {
-  const d = new Date(key + "-01T00:00:00");
-  return d.toLocaleDateString("es-AR", { month: "short", year: "2-digit" });
-}
+async function ExpensesContent() {
+  const [expenses, conv, categories, platforms] = await Promise.all([getExpenses(), getConverter(), getCategories(), getPlatforms()]);
+  const current = currentMonthKey();
+  const months = windowMonths(current, 12, expenses.map((e) => e.date));
+  const series = monthlySums(expenses, months, conv);
+  const last = series.ars.length - 1;
+  const prevArs = series.ars[last - 1];
+  const change = prevArs && prevArs > 0 ? ((series.ars[last] - prevArs) / prevArs) * 100 : null;
 
-export default async function ExpensesPage() {
-  const [user, supabase] = await Promise.all([getUser(), createClient()]);
-
-  const [{ data: expenses }, dolarBlue, { data: categoryRows }] = await Promise.all([
-    supabase
-      .from("expenses")
-      .select("*, platform:platforms(*)")
-      .eq("user_id", user!.id)
-      .order("date", { ascending: false }),
-    getDolarBlue(),
-    supabase
-      .from("expense_categories")
-      .select("*")
-      .eq("user_id", user!.id)
-      .order("sort_order"),
-  ]);
-
-  // Falls back to the built-in list when the user hasn't customised one.
-  const categories = resolveCategories(categoryRows);
-  const icons = iconMap(categories);
-
-  const allExpenses = expenses ?? [];
-
-  const usdRate = dolarBlue?.venta ?? 0;
-  const toArs = (row: { amount: number; currency: string }) => {
-    const amount = Number(row.amount);
-    if (row.currency === "USD") return amount * usdRate;
-    if (row.currency === "EUR") return amount * usdRate;
-    return amount;
-  };
-
-  // Current and previous month keys
-  const now = new Date();
-  const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
-
-  // Category breakdown for current month
-  const curMonthExpenses = allExpenses.filter((e) => buildMonthKey(e.date) === curMonth);
-  const categoryMap = new Map<string, number>();
-  for (const e of curMonthExpenses) {
-    categoryMap.set(e.category, (categoryMap.get(e.category) ?? 0) + toArs(e));
+  // Pie: every month of the window, colours fixed per category across it.
+  const icons = Object.fromEntries(categories.map((c) => [c.name, c.icon]));
+  const totals = new Map<string, number>();
+  const byMonth = new Map<string, Map<string, { ars: number; usd: number }>>();
+  for (const e of expenses) {
+    const m = e.date.slice(0, 7);
+    if (m < months[0]) continue;
+    const ars = conv.toArs(e);
+    totals.set(e.category, (totals.get(e.category) ?? 0) + ars);
+    const month = byMonth.get(m) ?? new Map();
+    byMonth.set(m, month);
+    const cell = month.get(e.category) ?? { ars: 0, usd: 0 };
+    cell.ars += ars;
+    cell.usd += conv.toUsd(e);
+    month.set(e.category, cell);
   }
-  const categoryTotal = curMonthExpenses.reduce((s, e) => s + toArs(e), 0);
-  const categoryData = [...categoryMap.entries()]
-    .map(([category, amount]) => ({
-      category,
-      amount,
-      percentage: categoryTotal > 0 ? (amount / categoryTotal) * 100 : 0,
-    }))
-    .sort((a, b) => b.amount - a.amount);
+  const ranked = [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name);
+  // Six named colours, then the neutral "rest" step for everything else.
+  const colors = Object.fromEntries(ranked.map((name, i) => [name, chartVars.slots[Math.min(i, 6)]]));
+  const donutMonths: DonutMonth[] = months.map((month) => ({
+    month,
+    slices: [...(byMonth.get(month)?.entries() ?? [])].map(([name, v]) => ({ name, label: categoryLabel(name), icon: icons[name], ...v })),
+  }));
+  // Open on the last month that has spending, not on an empty one.
+  let initial = donutMonths.length - 1;
+  while (initial > 0 && donutMonths[initial].slices.length === 0) initial--;
 
-  // Previous month total for % change
-  const prevMonthTotal = allExpenses
-    .filter((e) => buildMonthKey(e.date) === prevMonth)
-    .reduce((s, e) => s + toArs(e), 0);
-  const categoryChange = prevMonthTotal > 0
-    ? ((categoryTotal - prevMonthTotal) / prevMonthTotal) * 100
-    : undefined;
-
-  // Monthly trend (last 12 months)
-  const monthMap = new Map<string, number>();
-  for (const e of allExpenses) {
-    const key = buildMonthKey(e.date);
-    monthMap.set(key, (monthMap.get(key) ?? 0) + toArs(e));
-  }
-  const sortedMonths = [...monthMap.keys()].sort();
-  const last12 = sortedMonths.slice(-12);
-  const trendData = last12.map((key, i) => {
-    const total = monthMap.get(key)!;
-    const prevKey = i > 0 ? last12[i - 1] : sortedMonths[sortedMonths.indexOf(key) - 1];
-    const prev = prevKey ? monthMap.get(prevKey) : undefined;
-    const change = prev && prev > 0 ? ((total - prev) / prev) * 100 : undefined;
-    return { month: formatMonthLabel(key), total, change };
-  });
+  const groups = groupByMonth(
+    expenses.map((e) => ({ id: e.id, date: e.date, amount: e.amount, currency: e.currency, bucket: e.category, description: e.description, platform_id: e.platform_id })),
+    conv
+  );
+  const monthName = formatMonthName(current);
 
   return (
-    <VStack gap="6" align="stretch">
-      <Heading size="lg" color="fg.heading">
-        Gastos
-      </Heading>
-      <ExpenseForm categories={categories} />
-      <LazySection minHeight="300px">
-        <SimpleGrid columns={{ base: 1, md: 2 }} gap="4">
-          <ExpenseCategoryChart data={categoryData} total={categoryTotal} change={categoryChange} icons={icons} />
-          <ExpenseTrendChart data={trendData} />
-        </SimpleGrid>
-      </LazySection>
-      <LazySection minHeight="200px">
-        <ExpenseList expenses={allExpenses} icons={icons} />
-      </LazySection>
-    </VStack>
+    <>
+      <Hero
+        label={`Gastos de ${monthName}`}
+        ars={series.ars[last] ?? 0}
+        usd={series.usd[last] ?? 0}
+        change={change}
+        goodWhen="down"
+        changeLabel={`vs. ${formatMonthName(addMonths(current, -1))}`}
+      />
+
+      <ChartCard
+        title="Gastos por mes"
+        subtitle="Cuánto salió cada mes. El mes en curso aparece más claro."
+        table={<ChartTable months={months} columns={[{ label: "Gastos", values: series }]} />}
+      >
+        <BarChart
+          months={months}
+          current={current}
+          monthChange={{ goodWhen: "down" }}
+          series={[{ key: "expense", label: "Gastos", color: chartVars.expense, values: series }]}
+        />
+      </ChartCard>
+
+      <ChartCard title="En qué se fue" subtitle="Los gastos de cada mes por categoría, de mayor a menor.">
+        <MonthlyDonut months={donutMonths} colors={colors} initialIndex={initial} />
+      </ChartCard>
+
+      <Section label="Movimientos" title="Todos los gastos">
+        <MovementList
+          kind="expense"
+          groups={groups}
+          categories={categories}
+          platforms={platforms.filter((p) => p.is_active).map((p) => ({ id: p.id, name: p.name }))}
+        />
+      </Section>
+    </>
   );
 }

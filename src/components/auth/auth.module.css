@@ -1,0 +1,57 @@
+.page {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 1080px) {
+  .page {
+    grid-template-columns: 1.1fr 1fr;
+  }
+}
+.intro {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-40);
+  padding: var(--space-28) var(--gutter) var(--space-32);
+  background: var(--block);
+}
+@media (min-width: 1080px) {
+  .intro {
+    padding: var(--space-40) var(--space-64);
+  }
+}
+.copy {
+  animation: rise 0.7s var(--ease-out) 0.1s both;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  max-width: 620px;
+}
+.title {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 400;
+  font-size: clamp(38px, 7vw, 88px);
+  line-height: 0.95;
+  letter-spacing: -0.01em;
+}
+.lead {
+  font-size: clamp(16px, 1.3vw, 19px);
+  color: var(--text-2);
+  max-width: 44ch;
+}
+.formSide {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-32) var(--gutter) var(--space-48);
+}
+.card {
+  animation: rise 0.7s var(--ease-out) 0.25s both;
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-24);
+}

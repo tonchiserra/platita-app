@@ -1,18 +1,15 @@
-import { VStack, Heading } from "@chakra-ui/react";
-import { InvestmentTabs } from "@/components/investments/InvestmentTabs";
+import { InvestmentTabs } from "@/components/investments/PortfolioClient";
+import s from "@/components/investments/investments.module.css";
 
-/**
- * The heading and the tab bar live here so both halves share them and neither
- * re-renders the chrome. Each page below fetches only its own data.
- */
+/** Two routes, not two states: Trading never pays for the price lookups, Cartera never reads the trade book. */
 export default function InvestmentsLayout({ children }: { children: React.ReactNode }) {
   return (
-    <VStack gap="6" align="stretch">
-      <Heading size="lg" color="fg.heading">
-        Inversiones
-      </Heading>
-      <InvestmentTabs />
+    <>
+      <div className={s.top}>
+        <h1 className="h1">Inversiones</h1>
+        <InvestmentTabs />
+      </div>
       {children}
-    </VStack>
+    </>
   );
 }

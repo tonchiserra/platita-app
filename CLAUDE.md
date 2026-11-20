@@ -4,177 +4,188 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Platita is a personal finance app for tracking expenses, income, investments, and net worth (patrimonio). Built for the Argentine market with multi-currency support (ARS, USD, EUR, BTC, ETH) and real-time exchange rates.
+Platita is a personal finance app for tracking expenses, income, investments, a trading book and net worth (patrimonio). Built for the Argentine market with multi-currency support (ARS, USD, EUR, BTC, ETH) and live exchange rates. Used almost only on the phone: everything is mobile-first.
 
 **The entire UI is in Spanish (es-AR)** — labels, headings, empty states, error copy. Code, comments, and identifiers are in English. New user-facing strings must be written in Spanish.
+
+The visual language is the **COSRX AR UI Kit** (Innovate, `~/Desktop/Innovate/cosrx-theme`: `snippets/ui-kit-tokens.liquid`, `docs/theme-plan/ui-kit.md`, handoff in `docs/design/handoff/2026-10-20-completo`). The full rationale of the 2026-11 rewrite is in `docs/plans/2026-11-20-refactor-cosrx-design.md`.
 
 ## Commands
 
 ```bash
-npm run dev      # Dev server on localhost:3000 (Turbopack, default in Next 16)
+npm run dev      # Dev server on localhost:3000 (Turbopack)
 npm run build    # Production build — also the only full TypeScript check
 npm start        # Production server
-npm run lint     # ESLint (flat config, next/core-web-vitals + next/typescript)
+npm run lint     # ESLint (flat config, next/core-web-vitals + next/typescript + React Compiler rules)
+npm test         # Every scripts/*.test.ts through tsx (pure logic only)
 ```
 
-No test framework is configured. `npm run lint` does not type-check; use `npx tsc --noEmit` or `npm run build` for that.
+Tests are plain `tsx` scripts with a tiny `check()` helper, not a framework. Run one with `npx tsx scripts/<name>.test.ts`. Anything with arithmetic (conversion, positions, patrimony, backup) lives in a pure module so it can be tested this way.
 
 ## Tech Stack
 
-- **Next.js 16** (App Router) + **React 19** with React Compiler enabled (`reactCompiler: true` in `next.config.ts`)
+- **Next.js 16** (App Router) + **React 19** with React Compiler (`reactCompiler: true`)
 - **Supabase** (Auth + PostgreSQL with Row Level Security)
-- **Chakra UI v3** for components, **next-themes** for dark mode
-- **Recharts** for charts
-- **TypeScript 5** with strict mode, path alias `@/*` → `./src/*`
+- **CSS Modules + design tokens**. There is no UI library and no CSS-in-JS: Chakra and Emotion were removed on purpose, because they were the biggest JS cost on phones.
+- **Charts are hand-written SVG** (`src/components/charts`), rendered on the server. Recharts was removed.
+- **next-themes** for dark mode (`attribute="class"`, light default)
+- **TypeScript 5** strict, path alias `@/*` → `./src/*`
 
 ## Architecture
 
 ### Route Groups
 
-- `src/app/(auth)/` — Login, register, OAuth callback (public)
-- `src/app/(dashboard)/` — All protected pages under `/dashboard/*`
+- `src/app/(auth)/` — Login, register, OAuth callback (public). `AuthForm` honours `?redirectTo=` (only `/dashboard…` paths).
+- `src/app/(dashboard)/` — All protected pages under `/dashboard/*`: Inicio, Gastos, Ingresos, Patrimonio, Inversiones (Cartera + `/trading`), Ajustes.
 
-Route protection lives in `src/proxy.ts` (Next 16's renamed middleware entry — it exports `proxy()`, not `middleware()`), which delegates to `src/lib/supabase/middleware.ts`. That refreshes the Supabase session on every request, redirects unauthenticated users off `/dashboard/*` to `/login?redirectTo=…`, and redirects authenticated users away from `/login` and `/register`.
+Route protection lives in `src/proxy.ts` (Next 16's renamed middleware entry — it exports `proxy()`), which delegates to `src/lib/supabase/middleware.ts`.
 
-**Auth is checked with `getClaims()`, never `getUser()`, on the server.** The project signs JWTs with an asymmetric key (ES256), so `getClaims()` verifies the signature locally against a JWKS that auth-js caches process-wide for 10 minutes. `getUser()` is a round-trip to the Auth server (~300 ms from here). The proxy and the layout used to make one each, back to back, before any page could start its queries. That was more than half the time of every request. The trade-off is that a session revoked before its token expires still passes until `exp`. RLS has the same blind spot, because every query carries that same token.
+**Auth is checked with `getClaims()`, never `getUser()`, on the server.** The project signs JWTs with ES256, so `getClaims()` verifies locally against a JWKS cached for 10 minutes, while `getUser()` is a ~300 ms round-trip to the Auth server. A session revoked before `exp` still passes until it expires; RLS has the same blind spot.
 
-### Supabase Client Pattern
+### Supabase clients — never mix them
 
-Two separate clients — never mix them:
-- **Server**: `src/lib/supabase/server.ts` — `createClient()` (async, uses `cookies()`) and `getUser()`, which returns a minimal `AuthUser` (`{ id, email }`) read from the verified JWT claims. It is wrapped in `React.cache` so layout + page share one verification.
-- **Browser**: `src/lib/supabase/client.ts` — `createClient()` is **async**. It returns a promise singleton that imports `@supabase/ssr` on first use, which keeps supabase-js (~185 KB) out of every page's initial bundle: nothing touches the browser client until a save, a delete or a sign-in. `getSessionUser()` returns the user from the local session, with no network call, for stamping `user_id` on writes.
+- **Server**: `src/lib/supabase/server.ts` — `createClient()` (async, cookies) and `getUser()` (`React.cache`d, reads the verified claims).
+- **Browser**: `src/lib/supabase/client.ts` — `createClient()` is **async** and imports `@supabase/ssr` on first use, keeping ~185 KB out of every page. `getSessionUser()` reads the local session for stamping `user_id`.
 
-The env var for the anon key is `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (not `..._ANON_KEY`).
+The env var for the anon key is `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (not `..._ANON_KEY`). The proxy builds a Supabase client on every request, so **no route renders without both env vars** — not even `/login`.
 
-### Read Path (Server Components)
+### Read path: `src/lib/data` + `src/lib/compute`
 
-Pages are `async` Server Components. The canonical shape:
+- `src/lib/data/index.ts` (`server-only`) holds every query as a `React.cache`d loader: `getSession`, `getRates`, `getConverter`, `getExpenses`, `getIncomes`, `getTrades`, `getSnapshots`, `getInvestments`, `getAssetPrices`, `getPlatforms`, `getCategories`… Each names its columns and filters `.eq("user_id", user.id)` even though RLS does too: the explicit filter lets Postgres use the `(user_id, date)` indexes. Because they are cached per request, sections of one page (and the layout) share a single round trip.
+- `src/lib/compute/index.ts` holds aggregations shared by more than one page: `monthlySums` (every series in ARS **and** USD), `allIncomes` (manual incomes + trading profits), `windowMonths`, `estimatePatrimony`, `buildGrowth`. `src/lib/compute/portfolio.ts` builds the portfolio (`getPortfolio`, `getPerformance`).
+- Pages are thin: they `await` loaders inside `<Suspense>` sections so the headline figure renders before slow blocks (blue history, market history). Every route has a `loading.tsx` (`PageSkeleton`) for instant feedback on navigation.
 
-```tsx
-const [user, supabase] = await Promise.all([getUser(), createClient()]);
-const [{ data: a }, { data: b }, rate] = await Promise.all([
-  supabase.from("expenses").select("...").eq("user_id", user!.id),
-  ...
-]);
-```
+### Write path — no Server Actions
 
-Every query filters `.eq("user_id", user!.id)` explicitly even though RLS already enforces it. All aggregation (monthly grouping, category breakdowns, trend series, percentage changes) happens in the page body and is passed to presentational Client Components as plain props.
-
-### Write Path (Client Components) — no Server Actions
-
-There are **zero Server Actions and zero API routes for mutations**. Every insert/update/delete runs in a `"use client"` component using the browser Supabase client, then calls `router.refresh()` to re-run the Server Component and pull fresh data. Forms read values via `new FormData(e.currentTarget)`, not controlled state.
+Every insert/update/delete runs in a `"use client"` component through **`useWrite()`** (`src/lib/supabase/use-write.ts`). It gets the browser client and the session user, runs the write, maps PostgREST errors to Spanish (`explainError`), and refreshes the Server Components inside a transition.
 
 ```tsx
-const [supabase, user] = await Promise.all([createClient(), getSessionUser()]);
-const { error } = await supabase.from("expenses").insert({ user_id: user!.id, ... });
-router.refresh();
+const { run, saving, error } = useWrite();
+const ok = await run((supabase, userId) => supabase.from("expenses").insert({ ...row, user_id: userId }));
 ```
 
-Read `FormData` from `e.currentTarget` **before** the first `await`. React clears `currentTarget` once the handler yields.
+- Forms read values with `new FormData(e.currentTarget)` **before** the first `await`; React clears `currentTarget` once the handler yields. Forms that need live arithmetic (patrimony close, investment operation) use controlled state instead.
+- **RLS is the only authorization layer.** A new table needs its own policies, written as `(select auth.uid()) = user_id … to authenticated` (see migration 004).
+- `user_id` must be set explicitly on every insert. There is no DB default.
+- Destructive actions go through `ConfirmDialog`. Editing happens in a `Sheet` (native `<dialog>`: a bottom sheet on the phone, a modal from 760 px up). A field marked `data-autofocus` gets focus when a sheet opens.
 
-Consequences to respect when adding features:
-- **RLS is the only authorization layer.** Any new table needs its own policies in a migration or writes will silently fail.
-- `user_id` must be set explicitly on every insert — there is no DB default.
-- Destructive actions go through `ConfirmDialog` (`src/components/shared/ConfirmDialog.tsx`) driven by a `deleteId` state field.
+### UI kit (`src/components/ui`)
 
-### Chart Loading Pattern
+- `index.tsx` (server-safe): `Button`/`ButtonLink` (variants `primary` and `accent` both solid blue, `secondary`, `ghost`, `danger`, `text`), `Badge`, `LineLabel` (the eyebrow above a figure or section: small caps with a blue dot — the user rejected the kit's `[/ … /]` format), `Money`, `Delta`, `Box` (info box: white/grey/blue/up/down/black), `Section`, `Field`/`Input`/`Select`/`Textarea`, `SegmentedRadio`, `EmptyState`, `Skeleton`.
+- `CountUp.tsx`: the hero figure counts up when it appears after a navigation (never over the first server-rendered paint — see `hydration.ts`). `Logo.tsx`: the original Platita logo (`/platita-logo.svg`), lifted by a CSS filter in dark mode.
+- Every segmented control has a sliding thumb (`.segThumb`, positioned by `--seg-n` / `--seg-i`). Radio groups set the index with `:has()`, with no JS.
+- `client.tsx`: `Sheet`, `ConfirmDialog`, `MoneyToggle`, `ThemeSwitch`.
+- `Icon.tsx`: inline SVG icons on the kit's spec (24 grid, 1.6 stroke, round ends). No icon library.
 
-Every Recharts chart is (a) declared with `next/dynamic` in `src/components/shared/lazy-charts.tsx` and imported from there by the page, and (b) wrapped in `<LazySection>` in the JSX. `LazySection` (`src/components/shared/LazySection.tsx`) is an IntersectionObserver gate that renders a sized placeholder card until scrolled near. Follow both halves when adding a chart: Recharts weighs ~295 KB, and this keeps it off the initial bundle.
+### Money visibility is a CSS switch on `<html>`
 
-The `dynamic()` calls **must** live in that `"use client"` module. When `next/dynamic` is called from a Server Component page, the chart still goes into the page's client manifest, and Recharts ships with the first load. The build output confirms this. Calling it from a Client Component makes the chunk load when `LazySection` first renders the chart. Each `dynamic()` there passes `{ loading }`, which renders `SectionPlaceholder`. That placeholder reads the enclosing `LazySection`'s `minHeight` from context and keeps the same sized card on screen while the chunk downloads. Without it the section collapsed to zero height in between, and everything below it jumped (CLS 0.14 while scrolling the dashboard).
+An inline script in `src/app/layout.tsx` runs before first paint and sets the attribute from localStorage:
 
-Long lists grouped by month (`ExpenseList`, `IncomeList`, `TradeList`) pass `lazyMount` to `Collapsible.Root`. Ark mounts collapsed content by default, so every row of every month rendered on load: thousands of DOM nodes and a visible freeze on the expenses page.
+- `data-money="hidden"` (`platita-show-money`): `Money` always renders the value **and** a mask, and CSS shows one of them. Amounts therefore render in Server Components, with no context and no flash. **Every displayed amount goes through `<Money>`.**
+- **Charts are in pesos only.** The user asked to drop the ARS/USD switch. The compute layer still returns both series, but the charts draw `ars`. Key figures keep their dollar value as a secondary line. The investments page leads in pesos too, at today's blue. Position cards stay in USD, because unit costs and prices are dollar quotes. **Trading is always in USD and never shows pesos** (user rule): its hero, summary and running-result chart use `currency="USD"` on `LineChart` / `ChartTable`. The running result is coloured by sign: the hero (`Hero bySign`) is green with + or red with −, and the chart line and wash (`LineSeries.bySign`) are green above zero and red below. A hard-stop gradient splits them exactly at the zero line, and the wash fills to zero.
 
-### Currency Conversion
+### Charts (`src/components/charts`)
 
-Exchange rates come from server-side fetches with 5-minute ISR revalidation (`next: { revalidate: 300 }`): dolarapi.com for USD/EUR (`venta` side of *blue*, not oficial) and CoinGecko for BTC/ETH. Every fetcher returns `null` on failure rather than throwing, and callers fall back to `0` — so a dead upstream degrades to zeroed totals rather than a crashed page.
+- `Charts.tsx`: `ChartCard` (title, legend, optional extra controls and toggle chip, footnote, "Ver tabla"), `BarChart` (one series, or two grouped), `LineChart`, `ChartTable`, `ToggleView`.
+  - X coordinates are **percentages**, so a chart fits any width with no measuring. Line paths live in a stretched `viewBox` with `vector-effect: non-scaling-stroke`, and end dots sit in a percentage overlay so they stay round.
+  - Hover and tap readouts are CSS (`:hover` / `:focus`) on one focusable column per month, each with an `aria-label` summary.
+  - Bars have a rounded data end and a square foot (taller rect clipped at the baseline). The open month is drawn lighter.
+- `MonthlyDonut.tsx` and `GrowthChart.tsx` are the client charts (month stepper; time range). Category colour is fixed over the whole window, so a category keeps its colour between months.
+- The "vs. dolarizado" chip is a checkbox. The card renders both variants and `:has(input:checked)` swaps them, because the toggle changes the y-scale.
+- **Capital growth has a time range** (3M, 6M, 1A, 3A, 5A, Todo; default 1A; ranges longer than the history are hidden). `GrowthChart.tsx` is a client component for that state. The range **crops** the series and never recomputes it, so the dollarized line stays anchored at the first movement.
+- Charts draw on arrival (bars grow from the baseline staggered, lines reveal left to right with a `clip-path`, end dots pop, the donut spins in). A view hidden with `display: none` restarts its animations when shown, so the toggle redraws the chart; a new range or donut month redraws it through a key.
+- Bars start at zero (`zeroScale`). Lines hug the data (`axisScale` in `src/lib/utils/chart-scale.ts`). Ticks are compact with a decimal when needed (22,5 M).
+- Chart colours are tokens (`--chart-*` in `tokens.css`), validated with the dataviz skill's `validate_palette.js` in both modes:
+  - **Ingresos are green and gastos are red**, as the user asked. The pair is kept CVD-safe by separating lightness (dark green and light red; inverted in dark mode).
+  - The patrimony and portfolio-value line is brand blue. The dollarized line is amber, and so is invested capital on the portfolio chart (both are the "second line").
+  - The donut takes six categorical hues from the dataviz reference palette, with no green or red so they don't read as gain or loss, plus a neutral step for the rest.
 
-`convertToArs(amount, currency, rates)` in `src/lib/utils/currency-conversion.ts` is the canonical converter (crypto converts through USD: `units × usdPrice × usdRate`). Note the dashboard page currently inlines its own copy of this logic as a closure over local rate variables — prefer the shared util in new code.
+The six product charts and where they live: ingresos (Ingresos), gastos and the monthly donut (Gastos), ingresos vs. gastos (Inicio), capital growth with "vs. dolarizado" (Inicio, Patrimonio). Inversiones adds the portfolio performance chart; Trading has its running result.
 
-**Not everything is ARS**: dashboard, patrimony, expenses, and income normalize to ARS. The investments page normalizes to **USD** instead (ARS purchases are divided by the blue rate), because asset prices come from CoinGecko in USD. Don't mix the two bases.
+### Currency conversion
 
-For crypto investments, `getCryptoPriceMap()` resolves user-typed asset names through a hardcoded ticker→CoinGecko-ID map (`COINGECKO_MAP`). Unmapped assets get no current price, and the UI surfaces them via `assetsWithoutPrice`.
+- Today's rates: dolarapi (blue `venta` for USD, euro) and Binance for BTC/ETH (CoinGecko as fallback). All fetched server-side with 5-minute revalidation.
+- **History**: the blue series from argentinadatos (~500 KB, 6 h revalidate). `makeBlueLookup` binary-searches it. `makeHistoricalConverter(fx, lookup)` (`src/lib/utils/currency-conversion.ts`) gives `toArs`/`toUsd` for a dated movement **at the blue of its own date**. EUR and crypto have no history and cross through today's prices.
+- Charts use the historical converter. **The patrimony estimate uses today's rates** for the movements since the close, like the close it revalues: a dollar received after the close is a dollar still held. `estimatePatrimony` is the single implementation, so Inicio and Patrimonio always agree.
+- Every fetcher returns `null` on failure instead of throwing. Callers degrade to zero or to "Sin precio".
+
+### Estimated net worth
+
+It is the last close revalued at today's rates, plus every movement since that close (`flowsSinceClose` in `src/lib/utils/patrimony-estimate.ts`), minus trading losses since then. It is not "this month's movements": months left unclosed must still count. The equation names the window after the month in the usual case and after the close date otherwise ("desde el cierre del 31 jul").
+
+The dollarized counterfactual is `buildAlternatives` (`patrimony-alternatives.ts`), fed by `buildTimeline` (`patrimony-timeline.ts`). Both are pure and tested, and they still compute the mattress and real-value lines. Only `dollarized` is drawn. Returns on money already held (`RETURN_SOURCES`, trading profits included) stay out of it.
+
+### Investments
+
+- `investments.side` is `buy` | `sell` (migration 004). Rows without it are purchases. `getInvestments` selects `*` so the page still works before the migration, and `hasSidesColumn()` hides sales until it is applied.
+- `src/lib/utils/portfolio.ts` (pure, tested): `buildPositions` uses average cost in USD (each operation converted at the blue of its date). A sale realizes `proceeds − avg × units` and leaves the average unchanged. `buildPerformance` produces the monthly invested-vs-value series; a month with no price carries the holding at cost.
+- Current prices, in priority order:
+  1. `asset_prices` (manual, per user, migration 004).
+  2. data912 (`src/lib/api/market.ts`) for CEDEARs, stocks and bonds. ARS ÷ today's blue; `D`/`C` tickers are USD; fixed income quotes per 100 face value.
+  3. Binance (`src/lib/api/crypto-prices.ts`, any `<ASSET>USDT` pair).
+- History: Binance monthly klines and data912 `/historical/*`.
+
+### Trading
+
+The `trades` table records closed operations with a signed `pnl_usd`. Profits become income rows (`tradeIncomes`), are listed read-only under Ingresos, and stay out of the dollarized line. Losses are never expenses: they only reduce the estimated patrimony. All of it lives in `src/lib/utils/trading.ts`.
 
 ### Database Schema
 
-Seven tables, all with RLS policies enforcing user isolation:
-- **platforms** — Financial accounts (bank, crypto_exchange, investment_broker, cash, other)
-- **expense_categories** — The user's editable category list (`name`, `icon`, `is_fixed`, `sort_order`). Deliberately **not** a foreign key: `expenses.category` stays free text so renaming or deleting a category never rewrites history. Read it through `resolveCategories()` in `src/lib/utils/expense-categories.ts`, which falls back to the built-in `EXPENSE_CATEGORIES` when the user has no rows — so every read path works before they customise, and before migration `002` is applied. `is_fixed` marks monthly-fixed charges that the month-end spending projection holds flat instead of scaling.
-- **expenses** — Transactions with category, currency, optional platform
-- **incomes** — Transactions with source, currency, optional platform
-- **investments** — Asset purchases (crypto, stock, bond, cedear, other)
-- **patrimony_snapshots** — Monthly net worth headers with `total_ars`
-- **patrimony_snapshot_items** — Breakdown per platform and currency (belongs to snapshot; its RLS policies check ownership via an `exists` subquery on the parent snapshot)
+Eight tables, all under RLS:
 
-Types in `src/types/database.ts` mirror these tables. Joined types (`ExpenseWithPlatform`, `PatrimonySnapshotFull`, etc.) are used for queries that include platform data. Numeric columns come back as strings from PostgREST in some paths — existing code wraps them in `Number(...)` defensively.
+- **platforms** — accounts (`bank`, `crypto_exchange`, `investment_broker`, `cash`, `other`). Archive with `is_active`.
+- **expense_categories** — the editable list. Deliberately **not** a foreign key: `expenses.category` is free text so renames never rewrite history. Read through `resolveCategories()`, which falls back to `EXPENSE_CATEGORIES`.
+- **expenses**, **incomes** — movements with currency and optional platform.
+- **investments** — buys and sells (`side`).
+- **asset_prices** — manual price per user and asset (`unique(user_id, asset)`, asset stored upper-case).
+- **trades** — the trading book.
+- **patrimony_snapshots** + **patrimony_snapshot_items** — monthly closes. Items have no `user_id`; their policies go through the parent.
 
-Migrations live in `supabase/migrations/`. `supabase/seed.sql` and `seed_demo_user.sql` are manual SQL-editor scripts that look up a user by a hardcoded email, so they require registering that account first.
+Built-in categories and income sources are **stored in English** ("Supermarket", "Salary") and translated only at render time (`src/lib/constants/labels.ts`).
 
-### Component Organization
+The project lives in **São Paulo (`sa-east-1`)**, and the Vercel functions are pinned next to it with `vercel.json` (`regions: ["gru1"]`). Until 2026-11-20 it was in us-west-2, where every query from Argentina took ~250 ms; keep the database and the functions in the same region.
 
-- `src/components/{feature}/` — Feature-specific components (expenses, income, investments, patrimony, settings)
-- `src/components/dashboard/` — Shell (Sidebar, TopBar, BottomNav) plus the dashboard's own blocks: `PatrimonyHero` → `PatrimonyEquation` (the net-worth arithmetic, the app's signature element) and `MonthFlow`
+Migrations live in `supabase/migrations/` and are applied with `psql` (or the SQL editor); there is no CLI migration history. `004_performance_and_investments.sql` (applied):
 
-The estimated net worth (dashboard hero, and the open month on the patrimony charts) is computed as **the last close revalued at today's rates, plus every movement since that close**. That last part comes from `flowsSinceClose()` in `src/lib/utils/patrimony-estimate.ts`, and both pages must use it so they agree. It is not "this month's movements": the two match only when the last close ended last month, and with months left unclosed that version dropped them. The equation names the window after the month in the usual case and after the close date otherwise ("desde el cierre del 31 jul").
-- `src/components/shared/` — Reusable generics (ConfirmDialog, EmptyState, LazySection, Select)
-- `src/components/ui/provider.tsx` — Root provider stack: `ThemeProvider` (next-themes, `attribute="class"`, light default) → `ChakraProvider` → `MoneyVisibilityProvider`
+- recreates every policy with `(select auth.uid())` and `to authenticated`;
+- adds the missing FK indexes (`snapshot_id` had none);
+- adds `investments.side` and `asset_prices`.
 
-Pages and layouts are Server Components; forms, lists, and charts are Client Components.
+The export/import (`src/components/settings/DataTransfer.tsx` + `src/lib/utils/backup-schema.ts`) carries `side` as an optional last column (`compra`/`venta`), so older files still import.
 
 ### Styling
 
-Chakra UI v3 with semantic tokens defined in `src/lib/theme/index.ts`. Use token names, never raw colors; they resolve per color mode automatically. Responsive props use `base`/`md`/`lg`.
+Tokens are in `src/styles/tokens.css`. The kit's brand names are kept (`--color-negro`, `--color-gris-producto`…), with **Platita's blue `--color-azul` #275396 (from the logo) in the place the kit gives to yellow**, at the user's request. Components read the semantic layer (`--bg`, `--surface`, `--block`, `--text`, `--text-2`, `--border`, `--primary`, `--accent`, `--up`/`--down`, `--chart-*`). Dark mode redefines only that layer under `html.dark`. **Never hard-code a colour in a component.**
 
-The system is built from `defaultBaseConfig` plus Chakra's own tokens and **only the recipes the app renders**: `button`, `heading`, `input`, `link`, `spinner` (used by Button's `loading`), and the slot recipes `collapsible` and `dialog`. The full `defaultConfig` ships ~75 recipes and costs ~86 KB of the Chakra chunk. A component without its recipe renders unstyled instead of failing, so **when adding a new Chakra component, register its recipe in `themeConfig`**. Recipes are exported from `@chakra-ui/react/theme` as `<name>Recipe` or `<name>SlotRecipe`.
+Kit rules to keep:
 
-- **Surfaces**: `bg.page`, `bg.card`, `bg.sunk` (recessed panels), `bg.input`, `bg.hover`
-- **Rules**: `border.card`, `border.input`, `border.strong`
-- **Text**: `fg.heading`, `fg.body`, `fg.muted`
-- **Direction**: `trend.up` / `trend.down` — for gains and losses only. Do not use Chakra's `green.400` / `red.400`.
-- **Currency**: `cur.ars`, `cur.usd`, `cur.eur`, `cur.btc`, `cur.eth` — colour *encodes the currency*, it is not decoration. A currency hue never doubles as a semantic state.
+- Red (`--error`) is for errors only. Gains and losses use `--up`/`--down` and always carry ▲/▼.
+- **Light UI, no black blocks** (the user found them ugly in light mode). `--primary` is the blue, so solid buttons are blue. Segmented controls are a light track with a white thumb, tooltips are white cards, the rate tiles are grey blocks, and rules are `--border-strong`, never `--text`. Black (`--color-negro`) is for text only.
+- Blue is the highlighted action (the "+" button, the main submit, the active tab and nav item on `--accent-soft`), never a large block background. There is no yellow anywhere.
+- Green (`--up`, `--up-soft`) is money in or a gain, and red (`--down`, `--down-soft`) is money out or a loss: list amounts, deltas, the "Quedó" and result boxes, the bars.
+- Shape: straight for structure, rounded for what you touch or what floats. Buttons, chips, inputs and segmented controls are pills; cards are 10 px; badges are 4 px.
+- **Motion is part of every component** (`src/styles/motion.css` + each module). Every state change animates. Durations and curves come from the tokens (`--ease-out`, `--ease-spring`, `--t-*`), and everything stops under `prefers-reduced-motion`.
+  - **Page transitions** use the View Transitions API through React's `<ViewTransition>` (`experimental.viewTransition` in `next.config.ts`; types from `react/canary`, referenced in `src/types/react-canary.d.ts`). The dashboard layout wraps the content in `<ViewTransition default="page">`.
+  - **Shared elements:** the nav indicators (`nav-indicator`, `side-indicator`) and the hero figure (`hero-figure`, Inicio ↔ Patrimonio) morph between pages. Each name must be unique on the page.
+  - **Theme and "ocultar montos"** switch inside `document.startViewTransition` (`withViewTransition`).
+  - **Entry:** the blocks of a page rise in, staggered (`.content > *`).
+  - **Accordions:** native `<details>` animate with `::details-content` + `interpolate-size`, and the React ones with `grid-template-rows: 0fr ↔ 1fr`. Their rows mount on first open and stay, so they can animate closed.
+  - **Rows:** a deleted row collapses while the delete is in flight, and a new row flashes in.
+  - **Sheets** keep their content mounted through the closing animation.
 
-Cards are styled inline and repeatedly as `bg="bg.card" borderRadius="xl" border="1px solid" borderColor="border.card"` — match that when adding one.
+**Typography** — free stand-ins for the kit's licensed faces (Maison Neue, Maison Neue Extended and Piek are the client's licence and must not be used here), wired with `next/font` in `src/app/layout.tsx`:
 
-**Typography** — three faces from Omnibus-Type, a Buenos Aires foundry, wired as CSS variables in `src/app/layout.tsx`:
-- `fontFamily="heading"` (Archivo) — section titles and display figures. Big figures add `css={{ fontVariationSettings: '"wdth" 110' }}` for the expanded width.
-- body default (Chivo) — everything else.
-- `fontFamily="mono"` (Chivo Mono) — **every money figure, percentage, and rate**. Always pair with the `data-num` attribute, which applies `tabular-nums` (see `globals.css`) so columns of digits don't reflow.
-
-Use `Select` from `@/components/shared/Select` (a `chakra("select")` primitive), **not** Chakra v3's `Select` composite — the codebase uses plain native selects with `name` attributes so FormData picks them up.
-
-### Alerts
-
-`src/lib/utils/alerts.ts` holds the dashboard's "Para tener en cuenta" panel. `buildAlerts()` is a **pure function** — every input, including `today`, is passed in, so each rule is testable without mocking time or the network. Rules are small functions collected in `RULES`; add a rule by writing one and appending it there.
-
-Two design constraints worth keeping:
-- **Thresholds live in the `T` object** and are deliberately loose. An alert that fires every month is noise, so each rule must stay silent in an ordinary month.
-- **Never state something arithmetic guarantees.** With two categories one must exceed 40 %, so `dominantCategory` requires four; likewise `platformConcentration` requires three platforms. Guards like these are the difference between an alert and a truism.
-
-Monthly CPI comes from argentinadatos (`getMonthlyInflation`), fetched server-side on a long revalidate and returning `null` on failure — so the rule that depends on it simply doesn't fire when the upstream is down.
-
-### Charts
-
-`src/lib/constants/colors.ts` is the single source of chart colour. Recharts fills reference Chakra's emitted CSS variables (`CHART.grid`, `CHART.axis`, `CURRENCY_COLOR.ARS`, …), so charts follow the colour mode with **no `useTheme()` / `isDark` branching** — don't reintroduce it.
-
-`AlternativesChart` compares net worth against four counterfactuals built from the same contributions.
-
-The two inflation-adjusted lines are deliberately **not** symmetric, because they answer different questions: `mattressReal` restates the pesos in money of the anchor month, while `dollarizedReal` keeps the nominal peso value the dollars fetch today and removes only what US inflation took from the dollar itself. US CPI comes from the BLS (`getUsCpiIndex`) as **index levels, not monthly percentages** — that series has real holes (October 2025 was never published), and a level lets any month be measured straight against the anchor, so a hole costs one point instead of ending the line. The keyless BLS v1 API serves three years and caps at 25 requests/day/IP; a longer history simply has no index for its early months and the line does not draw there.
- The maths lives in `src/lib/utils/patrimony-alternatives.ts` as a pure isomorphic function with **no imports**, so `src/lib/api/*` stays out of the client bundle. It runs once over the whole history, anchored at the first recorded movement. The range selector only **crops** that result: it does not re-base it. Re-basing made 3M, 6M and 1A three different charts instead of three windows onto one.
-
-`src/lib/utils/patrimony-timeline.ts` holds the server-side half. It runs to `currentMonth` (today), not to the last month with a movement, and hangs the open-month estimate on that month alone. Stopping at the last movement plotted October's estimate on August and cut short every range measured back from today.
-
-The y-axis deliberately does not start at zero, because the gaps between the lines are the point. `axisScale` in `src/lib/utils/chart-scale.ts` picks the tightest round domain that lands on 3–6 gridline intervals.
-
-Breakdowns are always sorted by amount, so they use a single-hue ramp (`RAMP_EXPENSE`, `RAMP_INCOME`, `RAMP_PLATFORM` via `rampColor(ramp, i)`) where colour encodes rank. Reach for a ranked bar list when the data is a ranking, and a stacked bar when it is a composition of one whole — the multi-hue donut this replaced encoded nothing.
+- `--font-texto` **Hanken Grotesk** (Maison Neue): body and UI. Digits are tabular by default.
+- `--font-display` **Mona Sans** at `font-stretch: 125%` (Maison Neue Extended): `.h1`/`.h2`/`.h3`, card titles.
+- `--font-cifra` / `--fw-cifra`: **important figures in bold** (user request) — Mona Sans 700 at normal width for the hero, the stat values, the positions, the rates, the donut total and the amount fields. The kit's Piek-style light numerals (Aleo) were dropped.
 
 ### Key Patterns & Gotchas
 
-- **Money visibility toggle**: `MoneyVisibilityContext` (`src/lib/context/money-visibility.tsx`) provides `showMoney` and `mask()`. Wrap every displayed amount in `mask(...)`. Persisted in localStorage key `platita-show-money`.
-- **Formatting**: Use `formatCurrency()`, `formatDate()`, `formatDateShort()`, `formatMonthYear()`, `formatPercentage()`, `parseArgentineNumber()` from `src/lib/utils/format.ts`. Locale is `es-AR`.
-- **Date parsing**: `YYYY-MM-DD` strings must be parsed as `new Date(s + "T00:00:00")` — bare `new Date("2026-01-01")` is UTC and shifts back a day in Argentina. The `format.ts` helpers already handle this; replicate it in ad-hoc parsing.
-- **Month keys**: monthly grouping uses `date.slice(0, 7)` string keys throughout, sorted lexicographically.
-- **Constants**: Categories (`src/lib/constants/categories.ts`), income sources (`sources.ts`), currencies/platform types/asset types (`currencies.ts`), navigation (`navigation.tsx`, with inline SVG icon components — no icon library is installed).
-- **Design docs**: feature design notes are written in Spanish under `docs/plans/` before implementation (see `docs/plans/2026-04-30-investments-avg-price-design.md`).
+- **Dates**: `YYYY-MM-DD` must be parsed with `parseLocalDate` / `new Date(s + "T00:00:00")`; a bare `new Date("2026-01-01")` is UTC and lands on the previous day here. "Today" and the current month come from `todayKey()` / `currentMonthKey()`, which use Buenos Aires time because the server runs in UTC.
+- **Month keys**: monthly grouping uses `date.slice(0, 7)` strings. `monthRange`, `addMonths` and `endOfMonth` are in `format.ts`.
+- **Formatting**: `formatMoney`, `formatPercent`, `formatMonthKey`, `formatMonthTick`, `formatDayMonth`, `parseArgentineNumber` (accepts `1.234,5` and `1234.5`) in `src/lib/utils/format.ts`.
+- **React Compiler lint**: don't mutate `document` or reassign outer variables inside components. Put such helpers at module level (see `setMoneyHidden`, `setChartCurrency`).
+- **Design docs** go in Spanish under `docs/plans/` before implementation.
 
 ## Environment Variables
 

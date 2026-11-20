@@ -1,0 +1,226 @@
+/*
+ * Design tokens — adapted from the COSRX AR UI Kit (Innovate, handoff 2026-10-20).
+ *
+ * Brand and support colours keep the kit's own names, so a value can be traced
+ * back to `snippets/ui-kit-tokens.liquid`. Everything a component reads goes
+ * through the semantic layer below them (`--bg`, `--text`, `--block`…), which
+ * is the only part dark mode redefines.
+ */
+
+:root {
+  /* ---------- Brand (UI Kit) ---------- */
+  --color-negro: #231f20;
+  --color-blanco: #ffffff;
+  /* Platita's own blue, from the logo. It takes the place the kit gives to yellow. */
+  --color-azul: #275396;
+  --color-azul-suave: #e9eff8;
+  --color-gris-producto: #f3f2ef;
+  --color-texto-secundario: #6b6766;
+  --color-texto-terciario: #8a8685;
+  --color-gris-oscuro: #4a4647;
+  --color-borde: #e6e6e3;
+  --color-borde-fuerte: #cfcdca;
+  --color-divisor-oscuro: #3a3536;
+  --color-gris-claro: #ececec;
+  --color-blue-peptide: #dfe7f5;
+  --color-error: #d6272e;
+
+  /* ---------- Semantic surfaces & ink ---------- */
+  --bg: var(--color-blanco);
+  --surface: var(--color-blanco);
+  --block: var(--color-gris-producto);
+  --block-strong: var(--color-gris-claro);
+  --text: var(--color-negro);
+  --text-2: var(--color-texto-secundario);
+  --text-3: var(--color-texto-terciario);
+  --border: var(--color-borde);
+  --border-strong: var(--color-borde-fuerte);
+  /* Light UI: the solid colour is the blue, never black blocks. */
+  --primary: var(--color-azul);
+  --on-primary: var(--color-blanco);
+  --primary-strong: #1d4078;
+  --accent: var(--color-azul);
+  --on-accent: var(--color-blanco);
+  --accent-soft: var(--color-azul-suave);
+  --accent-soft-strong: #d6e2f2;
+  /* Segmented controls: a light track with a white thumb. */
+  --seg-track: var(--color-gris-producto);
+  --seg-thumb: var(--color-blanco);
+  --seg-thumb-shadow: 0 1px 2px rgba(35, 31, 32, 0.12), 0 2px 8px rgba(35, 31, 32, 0.08);
+  /* Chart readouts. */
+  --tip-bg: var(--color-blanco);
+  --tip-text: var(--color-negro);
+  --tip-border: var(--color-borde);
+  --error: var(--color-error);
+  --overlay: rgba(35, 31, 32, 0.45);
+  --header-bg: rgba(255, 255, 255, 0.94);
+
+  /*
+   * Direction — green is money in or a gain, red is money out or a loss, as in
+   * the original Platita. Both always travel with ▲/▼ or a sign, so colour is
+   * never the only channel.
+   */
+  --up: #1f7a4d;
+  --down: #c42129;
+  --up-soft: #e6f3eb;
+  --down-soft: #fcebe9;
+
+  /* ---------- Charts (validated with dataviz/validate_palette.js) ---------- */
+  --chart-surface: var(--surface);
+  --chart-grid: var(--color-borde);
+  --chart-axis: var(--color-texto-terciario);
+  --chart-income: #1e6f44;
+  --chart-expense: #e8756a;
+  --chart-line: var(--color-azul);
+  --chart-line-2: #c27a1a;
+  --chart-neutral: #a7a3a1;
+  --chart-s1: #2a78d6;
+  --chart-s2: #eb6834;
+  --chart-s3: #1baf7a;
+  --chart-s4: #eda100;
+  --chart-s5: #e87ba4;
+  --chart-s6: #6250d6;
+  --chart-s7: #cfcdca;
+
+  /* ---------- Typography ---------- */
+  --font-texto: var(--font-hanken), "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-mona), "Helvetica Neue", Arial, sans-serif;
+  /* Key figures: the display face in bold, at normal width so long amounts fit a phone. */
+  --font-cifra: var(--font-mona), "Helvetica Neue", Arial, sans-serif;
+  --fw-cifra: 700;
+
+  --fs-10: 10px;
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-15: 15px;
+  --fs-16: 16px;
+  --fs-18: 18px;
+  --fs-20: 20px;
+  --fs-22: 22px;
+  --fs-26: 26px;
+  --fs-28: 28px;
+  --fs-34: 34px;
+  --fs-titular-s: clamp(25.5px, 2.6vw, 35.7px);
+  --fs-titular-m: clamp(30.6px, 3.7vw, 54.4px);
+  --fs-cifra: clamp(40px, 9vw, 72px);
+
+  --lh-1: 1;
+  --lh-tight: 1.1;
+  --lh-snug: 1.3;
+  --lh-text: 1.5;
+  --ls-titular: -0.01em;
+  --ls-etiqueta: 0.08em;
+  --ls-chico: 0.04em;
+
+  /* ---------- Shape: straight for structure, rounded for what you touch ---------- */
+  --radius-pill: 999px;
+  --radius-card: 10px;
+  --radius-int: 8px;
+  --radius-thumb: 6px;
+  --radius-tag: 4px;
+
+  /* ---------- Space ---------- */
+  --space-2: 2px;
+  --space-4: 4px;
+  --space-6: 6px;
+  --space-8: 8px;
+  --space-10: 10px;
+  --space-12: 12px;
+  --space-14: 14px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-28: 28px;
+  --space-32: 32px;
+  --space-40: 40px;
+  --space-48: 48px;
+  --space-64: 64px;
+  --gutter: clamp(16px, 3.4vw, 40px);
+  --header-h: 64px;
+  --nav-h: 64px;
+  --sidebar-w: 248px;
+  --content-max: 1120px;
+
+  /* ---------- Elevation ---------- */
+  --shadow-card-hover: 0 30px 40px -30px rgba(35, 31, 32, 0.3);
+  --shadow-barra-fija: 0 -8px 24px rgba(35, 31, 32, 0.08);
+  --shadow-flotante: 0 4px 12px rgba(0, 0, 0, 0.15);
+
+  /* ---------- Motion ---------- */
+  --t-rapida: 0.15s;
+  --t-base: 0.25s;
+  --t-fondo: 0.3s;
+  --t-panel: 0.45s;
+  --t-chart: 0.7s;
+  --ease-panel: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-reveal: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ---------- Focus (handoff: visible 2px outline) ---------- */
+  --focus-color: var(--text);
+  --focus-width: 2px;
+  --focus-offset: 2px;
+
+  color-scheme: light;
+}
+
+/*
+ * Dark mode is derived, not in the kit: the brand black becomes the page, the
+ * warm product grey becomes the ink, and yellow stays the accent. The chart
+ * steps were re-validated against the dark surface rather than flipped.
+ */
+html.dark {
+  --bg: #141213;
+  --surface: #1c191a;
+  --block: #242021;
+  --block-strong: #2c2829;
+  --text: #f3f2ef;
+  --text-2: #b9b5b3;
+  --text-3: #8a8685;
+  --border: #332f30;
+  --border-strong: #4a4647;
+  --primary: #3f6bbf;
+  --on-primary: #ffffff;
+  --primary-strong: #5a85d0;
+  --accent: #3f6bbf;
+  --on-accent: #ffffff;
+  --accent-soft: #172338;
+  --accent-soft-strong: #1f2f4b;
+  --seg-track: #242021;
+  --seg-thumb: #3a3536;
+  --seg-thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --tip-bg: #2c2829;
+  --tip-text: #f3f2ef;
+  --tip-border: #3a3536;
+  --error: #ff6b6b;
+  --overlay: rgba(0, 0, 0, 0.6);
+  --header-bg: rgba(20, 18, 19, 0.92);
+
+  --up: #4fb37b;
+  --down: #e06a5e;
+  --up-soft: #13281c;
+  --down-soft: #331b19;
+
+  --chart-grid: #2c2829;
+  --chart-axis: #8a8685;
+  --chart-income: #3fa872;
+  --chart-expense: #c0463d;
+  --chart-line: #5a85d0;
+  --chart-line-2: #bd8430;
+  --chart-neutral: #6b6766;
+  --chart-s1: #3987e5;
+  --chart-s2: #d95926;
+  --chart-s3: #199e70;
+  --chart-s4: #c98500;
+  --chart-s5: #d55181;
+  --chart-s6: #9085e9;
+  --chart-s7: #4a4647;
+
+  --shadow-card-hover: 0 30px 40px -30px rgba(0, 0, 0, 0.6);
+  --shadow-flotante: 0 4px 16px rgba(0, 0, 0, 0.5);
+
+  color-scheme: dark;
+}

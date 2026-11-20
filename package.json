@@ -6,11 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "sh scripts/run-tests.sh"
   },
   "dependencies": {
-    "@chakra-ui/react": "^3.33.0",
-    "@emotion/react": "^11.14.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.97.0",
     "babel-plugin-react-compiler": "^1.0.0",
@@ -19,7 +18,6 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "read-excel-file": "^9.3.10",
-    "recharts": "^3.7.0",
     "write-excel-file": "^4.1.1"
   },
   "devDependencies": {
