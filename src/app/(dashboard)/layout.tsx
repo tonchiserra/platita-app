@@ -2,10 +2,11 @@ import Link from "next/link";
 import { Suspense, ViewTransition } from "react";
 import { BottomNav, SettingsLink, SideNav } from "@/components/shell/Nav";
 import { QuickAdd } from "@/components/movements/QuickAdd";
+import { BingxAutoSync } from "@/components/investments/BingxSync";
 import { MoneyToggle } from "@/components/ui/client";
 import { Money } from "@/components/ui";
 import { Logo } from "@/components/ui/Logo";
-import { getCategories, getPlatforms, getRates, getSession } from "@/lib/data";
+import { getBingxConnection, getCategories, getPlatforms, getRates, getSession } from "@/lib/data";
 import s from "@/components/shell/shell.module.css";
 
 function Wordmark() {
@@ -25,6 +26,12 @@ async function QuickAddLoader({ variant }: { variant: "fab" | "sidebar" }) {
       platforms={platforms.filter((p) => p.is_active).map((p) => ({ id: p.id, name: p.name }))}
     />
   );
+}
+
+/** Only mounted with a connection, so users without one never call the sync route. */
+async function BingxAutoSyncLoader() {
+  const bingx = await getBingxConnection();
+  return bingx ? <BingxAutoSync lastSyncAt={bingx.last_sync_at} /> : null;
 }
 
 async function SideRates() {
@@ -92,6 +99,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <BottomNav />
       <Suspense fallback={null}>
         <QuickAddLoader variant="fab" />
+      </Suspense>
+      <Suspense fallback={null}>
+        <BingxAutoSyncLoader />
       </Suspense>
     </div>
   );

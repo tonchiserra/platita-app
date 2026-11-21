@@ -32,6 +32,7 @@ const PATHS = {
   calendar: "M5 6h14v14H5zM5 10h14M9 3v5m6-5v5",
   menu: "M3 7h18M3 12h18M3 17h12",
   info: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-5v-5m0-3h.01",
+  sync: "M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5",
 } as const;
 
 export type IconName = keyof typeof PATHS;

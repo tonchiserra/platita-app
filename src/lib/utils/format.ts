@@ -138,6 +138,22 @@ export function todayKey(now = new Date()): string {
   return now.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
 }
 
+/**
+ * How long ago a moment was: `recién`, `hace 5 min`, `hace 3 h`, `hace 2 días`,
+ * then the day (`11 ago`, in Buenos Aires) past a week.
+ */
+export function formatAgo(moment: string | Date, now = new Date()): string {
+  const date = typeof moment === "string" ? new Date(moment) : moment;
+  const minutes = Math.floor((now.getTime() - date.getTime()) / 60_000);
+  if (minutes < 1) return "recién";
+  if (minutes < 60) return `hace ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `hace ${hours} h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return days === 1 ? "hace 1 día" : `hace ${days} días`;
+  return `el ${formatDayMonth(todayKey(date))}`;
+}
+
 /** Current `YYYY-MM` in Buenos Aires. */
 export function currentMonthKey(now = new Date()): string {
   return todayKey(now).slice(0, 7);

@@ -3,9 +3,10 @@ import { Box, Money, Section, Skeleton } from "@/components/ui";
 import { Hero } from "@/components/dashboard/Hero";
 import { ChartCard, ChartTable, LineChart, chartVars } from "@/components/charts/Charts";
 import { NewTradeButton, TradeList } from "@/components/investments/TradeClient";
-import { getPlatforms, getTrades } from "@/lib/data";
+import { BingxSyncBar } from "@/components/investments/BingxSync";
+import { getBingxConnection, getPlatforms, getTrades } from "@/lib/data";
 import { tradeStats } from "@/lib/utils/trading";
-import { currentMonthKey, formatMonthName, formatPercent, monthRange } from "@/lib/utils/format";
+import { currentMonthKey, formatAgo, formatMonthName, formatPercent, monthRange } from "@/lib/utils/format";
 import s from "@/components/investments/investments.module.css";
 
 export const metadata = { title: "Trading · Platita" };
@@ -24,7 +25,7 @@ export default function TradingPage() {
 }
 
 async function TradingContent() {
-  const [trades, platforms] = await Promise.all([getTrades(), getPlatforms()]);
+  const [trades, platforms, bingx] = await Promise.all([getTrades(), getPlatforms(), getBingxConnection()]);
   const current = currentMonthKey();
   const month = tradeStats(trades, current);
   const all = tradeStats(trades);
@@ -86,7 +87,13 @@ async function TradingContent() {
       )}
 
       <Section label="Libro" title="Operaciones cerradas" aside={<NewTradeButton platforms={platformOptions} />}>
-        <TradeList trades={trades} platforms={platformOptions} />
+        {bingx && (
+          <BingxSyncBar
+            status={bingx.last_sync_at ? `BingX · sincronizado ${formatAgo(bingx.last_sync_at)}` : "BingX · todavía no se sincronizó"}
+            error={bingx.last_error}
+          />
+        )}
+        <TradeList trades={trades} platforms={platformOptions} suggestBingx={!bingx} />
       </Section>
     </>
   );

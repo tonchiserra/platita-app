@@ -98,6 +98,8 @@ export interface TradeRow {
   leverage: number | null;
   platform_id: string | null;
   notes: string | null;
+  /** `null` for an operation typed by hand; `'bingx'` when the sync imported it. */
+  source: string | null;
 }
 
 const num = <T extends { amount: number | string }>(r: T) => ({ ...r, amount: Number(r.amount) });
@@ -130,7 +132,7 @@ export const getTrades = cache(async (): Promise<TradeRow[]> => {
   const { user, supabase } = await getSession();
   const { data } = await supabase
     .from("trades")
-    .select("id, date, asset, direction, pnl_usd, pnl_pct, leverage, platform_id, notes")
+    .select("id, date, asset, direction, pnl_usd, pnl_pct, leverage, platform_id, notes, source")
     .eq("user_id", user.id)
     .order("date", { ascending: false })
     .order("created_at", { ascending: false });
@@ -140,6 +142,48 @@ export const getTrades = cache(async (): Promise<TradeRow[]> => {
     pnl_pct: t.pnl_pct === null ? null : Number(t.pnl_pct),
     leverage: t.leverage === null ? null : Number(t.leverage),
   }));
+});
+
+/**
+ * The user's BingX connection. The secret lives in Supabase Vault and is never
+ * selected. The key travels as its last four characters only: nothing a client
+ * component receives can call BingX. Null when there is none, or before
+ * migration 005.
+ */
+export interface BingxConnectionView {
+  id: string;
+  keyHint: string;
+  platform_id: string | null;
+  /** Positions closed from here on are imported. */
+  import_from: string;
+  /** "Todas las operaciones": imports started well before the connection. */
+  importsAll: boolean;
+  /** False after migration 006 dropped the old secret: the key must be entered again. */
+  hasSecret: boolean;
+  last_sync_at: string | null;
+  last_error: string | null;
+}
+
+export const getBingxConnection = cache(async (): Promise<BingxConnectionView | null> => {
+  const { user, supabase } = await getSession();
+  const { data } = await supabase
+    .from("exchange_connections")
+    .select("id, api_key, secret_id, platform_id, import_from, created_at, last_sync_at, last_error")
+    .eq("user_id", user.id)
+    .eq("exchange", "bingx")
+    .maybeSingle();
+  if (!data) return null;
+  const { api_key, secret_id, created_at, ...rest } = data as Omit<BingxConnectionView, "keyHint" | "importsAll" | "hasSecret"> & {
+    api_key: string;
+    secret_id: string | null;
+    created_at: string;
+  };
+  return {
+    ...rest,
+    keyHint: api_key.slice(-4),
+    importsAll: Date.parse(rest.import_from) < Date.parse(created_at) - 86_400_000,
+    hasSecret: secret_id !== null,
+  };
 });
 
 /* ---------- Patrimony ---------- */

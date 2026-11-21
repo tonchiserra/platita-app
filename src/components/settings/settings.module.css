@@ -123,3 +123,101 @@
 .row:nth-child(4) { animation-delay: 0.12s; }
 .row:nth-child(5) { animation-delay: 0.16s; }
 .row:nth-child(n + 6) { animation-delay: 0.2s; }
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding-left: var(--space-20);
+  font-size: var(--fs-14);
+}
+.steps li::marker {
+  color: var(--primary);
+  font-weight: 600;
+}
+.rowSelect {
+  width: auto;
+  min-width: 160px;
+  max-width: 100%;
+}
+
+/* ---------- BingX ---------- */
+
+.keyWarning {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  font-size: var(--fs-13);
+  line-height: 1.45;
+}
+.keyWarning strong {
+  font-size: var(--fs-14);
+}
+.steps a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.choices legend {
+  margin-bottom: var(--space-8);
+}
+.choice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: var(--space-10);
+  row-gap: 2px;
+  align-items: start;
+  padding: var(--space-12) var(--space-14);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-card);
+  cursor: pointer;
+  transition:
+    border-color var(--t-rapida) var(--ease-out),
+    background-color var(--t-rapida) var(--ease-out),
+    transform var(--t-rapida) var(--ease-out);
+}
+.choice:active {
+  transform: scale(0.99);
+}
+.choice:has(input:checked) {
+  border-color: var(--primary);
+  background: var(--accent-soft);
+}
+.choice:has(input:focus-visible) {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.choice input {
+  grid-row: span 2;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--primary);
+}
+.choiceTitle {
+  font-size: var(--fs-15);
+  font-weight: 500;
+}
+.choiceText {
+  font-size: var(--fs-13);
+  color: var(--text-2);
+}
+.syncNotice {
+  animation: rise 0.35s var(--ease-out) both;
+  font-size: var(--fs-13);
+  color: var(--text-2);
+}
+@media (prefers-reduced-motion: reduce) {
+  .choice {
+    transition: none;
+  }
+}

@@ -67,6 +67,7 @@ const ok = await run((supabase, userId) => supabase.from("expenses").insert({ ..
 - Forms read values with `new FormData(e.currentTarget)` **before** the first `await`; React clears `currentTarget` once the handler yields. Forms that need live arithmetic (patrimony close, investment operation) use controlled state instead.
 - **RLS is the only authorization layer.** A new table needs its own policies, written as `(select auth.uid()) = user_id … to authenticated` (see migration 004).
 - `user_id` must be set explicitly on every insert. There is no DB default.
+- **The one exception is the BingX key**: `POST /api/bingx/connection` (Route Handler, not a Server Action) tries the key against BingX before storing it through the `bingx_save_key` RPC, still with the user's session. `POST /api/bingx/sync` imports trades the same way.
 - Destructive actions go through `ConfirmDialog`. Editing happens in a `Sheet` (native `<dialog>`: a bottom sheet on the phone, a modal from 760 px up). A field marked `data-autofocus` gets focus when a sheet opens.
 
 ### UI kit (`src/components/ui`)
@@ -129,16 +130,34 @@ The dollarized counterfactual is `buildAlternatives` (`patrimony-alternatives.ts
 
 The `trades` table records closed operations with a signed `pnl_usd`. Profits become income rows (`tradeIncomes`), are listed read-only under Ingresos, and stay out of the dollarized line. Losses are never expenses: they only reduce the estimated patrimony. All of it lives in `src/lib/utils/trading.ts`.
 
+**BingX sync** (design: `docs/plans/2026-11-21-sincronizacion-bingx-design.md`). Each user connects their own **read-only** BingX key in Ajustes, with **nothing to configure on the server**. Closed USDT-M perpetual positions then enter the book by themselves, with `source = 'bingx'` and `external_id = positionId`.
+- **The secret lives in Supabase Vault and never leaves Postgres** (migration 006):
+  - `bingx_save_key` (security definer) stores it;
+  - `bingx_sign` returns only the HMAC, for the two history-read shapes (income; `symbol`+`startTs`+`endTs`) with a timestamp within 10 s;
+  - a trigger deletes the secret with the connection.
+  - Users can't insert connections or update `secret_id` (column grants). There is no env var for this.
+- **On connect the user answers** «A partir de ahora» (`import_from = now`) or «Todas las operaciones» (`import_from = now − 1 year`). They also tick an «Entiendo» box: read-only only, and Platita is not responsible for over-permissioned keys. The server refuses keys with any permission besides read, or with an IP whitelist.
+- **Operations typed by hand are never doubled**: `dropManualDuplicates` matches same market and direction, a date ±1 day, and a result within US$ 0,05 or 1 %. It is calibrated on the real book.
+- **The result is `netProfit`**: PnL plus commission plus funding.
+- **Trigger**: `BingxAutoSync` (dashboard layout) calls the route on open and on `visibilitychange`, at most every 10 minutes. Connecting syncs at once. There is no cron and no service role key. The «Sincronizar» button forces a sync.
+- **Windows**: from `max(import_from, synced_until − 1 h)` to now, at most a year, split into 89-day windows. The unique index `(user_id, source, external_id)` makes repeats a no-op. Imported rows can't be deleted, because the overlap would bring them back. Only their notes and platform are editable.
+- Pure logic is in `src/lib/utils/bingx-sync.ts`. The calls and the local/Vault signers are in `src/lib/api/bingx.ts`.
+- **API facts, verified live, where the docs are wrong or silent:**
+  - `v2/trade/positionHistory` demands trading permission, so use **v1** (`startTs`/`endTs`, `symbol` required, pages from 0, ≤ 100 per page). The range filters on the close time and must be under 90 days. It keeps about six months.
+  - Pairs are discovered from `v2/user/income` **of every type**, because liquidations leave `INSURANCE_CLEAR`, not `REALIZED_PNL`. Income keeps only three months, and so does `allFillOrders`.
+  - BingX signs only the params, not the path. `positionAmt` is in coin units. `apiPermissions` returns a bare object with no `code`.
+
 ### Database Schema
 
-Eight tables, all under RLS:
+Nine tables, all under RLS:
 
 - **platforms** — accounts (`bank`, `crypto_exchange`, `investment_broker`, `cash`, `other`). Archive with `is_active`.
 - **expense_categories** — the editable list. Deliberately **not** a foreign key: `expenses.category` is free text so renames never rewrite history. Read through `resolveCategories()`, which falls back to `EXPENSE_CATEGORIES`.
 - **expenses**, **incomes** — movements with currency and optional platform.
 - **investments** — buys and sells (`side`).
 - **asset_prices** — manual price per user and asset (`unique(user_id, asset)`, asset stored upper-case).
-- **trades** — the trading book.
+- **trades** — the trading book. `source`/`external_id` mark imported rows (migration 005).
+- **exchange_connections** — one BingX key per user. The secret is in Vault (`secret_id`, never selected), and the browser only sees the key's last 4 characters. Rows are created only by `bingx_save_key`.
 - **patrimony_snapshots** + **patrimony_snapshot_items** — monthly closes. Items have no `user_id`; their policies go through the parent.
 
 Built-in categories and income sources are **stored in English** ("Supermarket", "Salary") and translated only at render time (`src/lib/constants/labels.ts`).
@@ -150,6 +169,8 @@ Migrations live in `supabase/migrations/` and are applied with `psql` (or the SQ
 - recreates every policy with `(select auth.uid())` and `to authenticated`;
 - adds the missing FK indexes (`snapshot_id` had none);
 - adds `investments.side` and `asset_prices`.
+
+`005_exchange_connections.sql` and `006_exchange_vault.sql` (both applied 2026-11-21) add `exchange_connections`, `trades.source`/`external_id`, the Vault functions and the column grants. Run SQL with `npx supabase@3.2.0 db query --remote=jbswqjpiodczpiisfrit`: the linked project in `supabase/.temp` is still the old us-west-2 one. `--read-only` runs as a read-only role, so writes and DDL go without it, with `--yes`.
 
 The export/import (`src/components/settings/DataTransfer.tsx` + `src/lib/utils/backup-schema.ts`) carries `side` as an optional last column (`compra`/`venta`), so older files still import.
 
@@ -193,3 +214,5 @@ Kit rules to keep:
 NEXT_PUBLIC_SUPABASE_URL=<supabase-project-url>
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<supabase-anon-key>
 ```
+
+There is deliberately no server secret for the exchange keys: they live in Supabase Vault (see Trading).

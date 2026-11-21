@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { Badge, Button, EmptyState, Field, Input, Money, SegmentedRadio, Select, Textarea, ui } from "@/components/ui";
+import { Badge, Box, Button, ButtonLink, EmptyState, Field, Input, Money, SegmentedRadio, Select, Textarea, ui } from "@/components/ui";
 import { ConfirmDialog, Sheet } from "@/components/ui/client";
 import { Icon } from "@/components/ui/Icon";
 import { useWrite } from "@/lib/supabase/use-write";
@@ -20,6 +20,8 @@ export interface TradeItem {
   leverage: number | null;
   platform_id: string | null;
   notes: string | null;
+  /** `'bingx'` when the sync imported it. Its result comes from the exchange and is not editable. */
+  source: string | null;
 }
 
 /**
@@ -116,6 +118,63 @@ function TradeForm({ platforms, initial, onDone }: { platforms: PlatformOption[]
   );
 }
 
+/**
+ * An operation the BingX sync brought in. Its result, date, market, direction
+ * and leverage are the exchange's record, so they show as facts. Only the
+ * platform and the notes are the user's to change.
+ */
+function ImportedTradeForm({ trade, platforms, onDone }: { trade: TradeItem; platforms: PlatformOption[]; onDone?: () => void }) {
+  const id = useId();
+  const { run, saving, error } = useWrite();
+
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const data = new FormData(e.currentTarget);
+    const row = {
+      platform_id: (data.get("platform_id") as string) || null,
+      notes: String(data.get("notes") ?? "").trim() || null,
+    };
+    const ok = await run((supabase) => supabase.from("trades").update(row).eq("id", trade.id));
+    if (ok) onDone?.();
+  }
+
+  return (
+    <form onSubmit={onSubmit} className={ui.stack} noValidate>
+      <Box tone={trade.pnl_usd >= 0 ? "up" : "down"} className={s.stat}>
+        <span className={s.statLabel}>Importada de BingX</span>
+        <Money className={s.statValue} value={trade.pnl_usd} currency="USD" signed />
+        <span className={s.statSub}>
+          {[
+            defaultLabel(trade),
+            formatDayMonth(trade.date),
+            trade.leverage ? `x${formatNumber(trade.leverage)}` : null,
+            trade.pnl_pct !== null ? `${formatPercent(trade.pnl_pct)} sobre el margen` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </span>
+      </Box>
+      <p className={s.importedNote}>El resultado viene del exchange, neto de comisiones y funding. Podés cambiar la plataforma y agregar notas.</p>
+      <Field label="Plataforma" htmlFor={`${id}-pl`}>
+        <Select id={`${id}-pl`} name="platform_id" defaultValue={trade.platform_id ?? ""}>
+          <option value="">Sin plataforma</option>
+          {platforms.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Notas (opcional)" htmlFor={`${id}-notes`} error={error}>
+        <Textarea id={`${id}-notes`} name="notes" rows={2} defaultValue={trade.notes ?? ""} />
+      </Field>
+      <Button type="submit" variant="primary" size="lg" block loading={saving}>
+        Guardar cambios
+      </Button>
+    </form>
+  );
+}
+
 export function NewTradeButton({ platforms }: { platforms: PlatformOption[] }) {
   const [open, setOpen] = useState(false);
   return (
@@ -130,7 +189,16 @@ export function NewTradeButton({ platforms }: { platforms: PlatformOption[] }) {
   );
 }
 
-export function TradeList({ trades, platforms }: { trades: TradeItem[]; platforms: PlatformOption[] }) {
+export function TradeList({
+  trades,
+  platforms,
+  suggestBingx = false,
+}: {
+  trades: TradeItem[];
+  platforms: PlatformOption[];
+  /** Invite to connect BingX in the empty state (there is no connection yet). */
+  suggestBingx?: boolean;
+}) {
   const [editing, setEditing] = useState<TradeItem | null>(null);
   const [deleting, setDeleting] = useState<TradeItem | null>(null);
   const [limit, setLimit] = useState(30);
@@ -138,7 +206,21 @@ export function TradeList({ trades, platforms }: { trades: TradeItem[]; platform
   const names = Object.fromEntries(platforms.map((p) => [p.id, p.name]));
 
   if (trades.length === 0)
-    return <EmptyState title="El libro está vacío" text="Cargá cada operación cerrada con su resultado. Las ganancias cuentan como ingreso; las pérdidas solo bajan el patrimonio estimado." />;
+    return (
+      <EmptyState
+        title="El libro está vacío"
+        text={`Cargá cada operación cerrada con su resultado. Las ganancias cuentan como ingreso; las pérdidas solo bajan el patrimonio estimado.${
+          suggestBingx ? " ¿Operás en BingX? Conectalo y tus operaciones entran solas." : ""
+        }`}
+        action={
+          suggestBingx ? (
+            <ButtonLink variant="secondary" href="/dashboard/settings#bingx">
+              Conectar BingX
+            </ButtonLink>
+          ) : undefined
+        }
+      />
+    );
 
   return (
     <>
@@ -148,14 +230,23 @@ export function TradeList({ trades, platforms }: { trades: TradeItem[]; platform
             <button type="button" className={s.op} onClick={() => setEditing(t)} aria-label={`Editar ${defaultLabel(t)}`}>
               <Badge tone={t.direction === "long" ? "neutral" : "dark"}>{t.direction === "long" ? "Long" : "Short"}</Badge>
               <span className={s.opMain}>
-                <span className={s.opTitle}>{t.notes || t.asset}</span>
+                <span className={s.opTitle}>
+                  {t.notes || t.asset}
+                  {t.source === "bingx" && (
+                    <>
+                      {" "}
+                      <Badge tone="accent">BingX</Badge>
+                    </>
+                  )}
+                </span>
                 <span className={s.opMeta}>
                   {[
                     formatDayMonth(t.date),
                     t.notes ? t.asset : null,
                     t.leverage ? `x${formatNumber(t.leverage)}` : null,
                     t.pnl_pct !== null ? formatPercent(t.pnl_pct) : null,
-                    t.platform_id ? names[t.platform_id] : null,
+                    // The badge already says BingX: don't repeat a platform of the same name.
+                    t.platform_id && !(t.source === "bingx" && /^bing\s*x$/i.test((names[t.platform_id] ?? "").trim())) ? names[t.platform_id] : null,
                   ]
                     .filter(Boolean)
                     .join(" · ")}
@@ -172,14 +263,18 @@ export function TradeList({ trades, platforms }: { trades: TradeItem[]; platform
         </Button>
       )}
       <Sheet open={!!editing} onClose={() => setEditing(null)} title="Editar operación">
-        {editing && (
-          <div className={ui.stack}>
-            <TradeForm key={editing.id} platforms={platforms} initial={editing} onDone={() => setEditing(null)} />
-            <Button variant="ghost" block onClick={() => setDeleting(editing)}>
-              <Icon name="trash" size={18} /> Eliminar
-            </Button>
-          </div>
-        )}
+        {editing &&
+          (editing.source ? (
+            // Imported rows can't be deleted: the next sync's overlap would bring them back.
+            <ImportedTradeForm key={editing.id} trade={editing} platforms={platforms} onDone={() => setEditing(null)} />
+          ) : (
+            <div className={ui.stack}>
+              <TradeForm key={editing.id} platforms={platforms} initial={editing} onDone={() => setEditing(null)} />
+              <Button variant="ghost" block onClick={() => setDeleting(editing)}>
+                <Icon name="trash" size={18} /> Eliminar
+              </Button>
+            </div>
+          ))}
       </Sheet>
       <ConfirmDialog
         open={!!deleting}

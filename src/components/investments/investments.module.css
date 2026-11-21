@@ -242,3 +242,29 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* ---------- BingX sync ---------- */
+
+.syncBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  min-height: 44px;
+  padding: var(--space-6) 0;
+  flex-wrap: wrap;
+}
+.syncStatus {
+  /* Keyed on its text, so each new status rises in. */
+  animation: rise 0.35s var(--ease-out) both;
+  font-size: var(--fs-13);
+  color: var(--text-2);
+  min-width: 0;
+}
+.syncStatus[data-failed] {
+  color: var(--error);
+}
+.importedNote {
+  font-size: var(--fs-13);
+  color: var(--text-2);
+}
