@@ -1,8 +1,6 @@
 "use client";
 
 import { useId, useState } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { Badge, Button, EmptyState, Field, Input, Money, Select, ui } from "@/components/ui";
 import { ConfirmDialog, Sheet } from "@/components/ui/client";
 import { Icon } from "@/components/ui/Icon";
@@ -13,29 +11,6 @@ import type { Currency } from "@/lib/constants/currencies";
 import type { PlatformOption } from "@/components/movements/MovementForm";
 import { OperationForm, type KnownAsset, type OperationInitial } from "./OperationForm";
 import s from "./investments.module.css";
-
-export function InvestmentTabs() {
-  const pathname = usePathname();
-  const tabs = [
-    { href: "/dashboard/investments", label: "Cartera" },
-    { href: "/dashboard/investments/trading", label: "Trading" },
-  ];
-  const index = Math.max(0, tabs.findIndex((t) => t.href === pathname));
-  return (
-    <nav
-      className={ui.segmented}
-      aria-label="Secciones de inversiones"
-      style={{ "--seg-n": tabs.length, "--seg-i": index } as React.CSSProperties}
-    >
-      <span className={ui.segThumb} aria-hidden="true" />
-      {tabs.map((t) => (
-        <Link key={t.href} href={t.href} className={ui.segButton} aria-current={pathname === t.href ? "page" : undefined}>
-          {t.label}
-        </Link>
-      ))}
-    </nav>
-  );
-}
 
 export function NewOperationButton({ platforms, assets, canSell }: { platforms: PlatformOption[]; assets: KnownAsset[]; canSell: boolean }) {
   const [open, setOpen] = useState(false);

@@ -36,7 +36,7 @@ Tests are plain `tsx` scripts with a tiny `check()` helper, not a framework. Run
 ### Route Groups
 
 - `src/app/(auth)/` — Login, register, OAuth callback (public). `AuthForm` honours `?redirectTo=` (only `/dashboard…` paths).
-- `src/app/(dashboard)/` — All protected pages under `/dashboard/*`: Inicio, Gastos, Ingresos, Patrimonio, Inversiones (Cartera + `/trading`), Ajustes.
+- `src/app/(dashboard)/` — All protected pages under `/dashboard/*`: Inicio, Gastos, Ingresos, Patrimonio, Inversiones (the portfolio), Trading (`/dashboard/trading`, its own nav tab because it is the page the user opens most; the old `/dashboard/investments/trading` redirects there from `next.config.ts`), Ajustes.
 
 Route protection lives in `src/proxy.ts` (Next 16's renamed middleware entry — it exports `proxy()`), which delegates to `src/lib/supabase/middleware.ts`.
 
@@ -129,6 +129,8 @@ The dollarized counterfactual is `buildAlternatives` (`patrimony-alternatives.ts
 ### Trading
 
 The `trades` table records closed operations with a signed `pnl_usd`. Profits become income rows (`tradeIncomes`), are listed read-only under Ingresos, and stay out of the dollarized line. Losses are never expenses: they only reduce the estimated patrimony. All of it lives in `src/lib/utils/trading.ts`.
+
+The Trading page shows the result of **today, this week and this month** together, in one card. `tradeStats(trades, period)` takes a month (`YYYY-MM`) or a `{ from, to }` range of days. Weeks run Monday to today (`weekStartKey`), in Buenos Aires calendar days like the month.
 
 **BingX sync** (design: `docs/plans/2026-11-21-sincronizacion-bingx-design.md`). Each user connects their own **read-only** BingX key in Ajustes, with **nothing to configure on the server**. Closed USDT-M perpetual positions then enter the book by themselves, with `source = 'bingx'` and `external_id = positionId`.
 - **The secret lives in Supabase Vault and never leaves Postgres** (migration 006):

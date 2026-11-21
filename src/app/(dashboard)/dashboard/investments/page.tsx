@@ -14,9 +14,12 @@ export const metadata = { title: "Inversiones · Platita" };
 
 export default function InvestmentsPage() {
   return (
-    <Suspense fallback={<Skeleton height={520} />}>
-      <PortfolioContent />
-    </Suspense>
+    <>
+      <h1 className="h1">Inversiones</h1>
+      <Suspense fallback={<Skeleton height={520} />}>
+        <PortfolioContent />
+      </Suspense>
+    </>
   );
 }
 

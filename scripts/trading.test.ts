@@ -9,6 +9,7 @@ import {
 } from "@/lib/utils/trading";
 import { RETURN_SOURCES, TRADE_INCOME_SOURCE } from "@/lib/constants/sources";
 import { buildTimeline } from "@/lib/utils/patrimony-timeline";
+import { weekStartKey } from "@/lib/utils/format";
 
 let pass = 0, fail = 0;
 const check = (n: string, c: boolean, x = "") => {
@@ -98,6 +99,30 @@ section("PostgREST devuelve números como texto");
   check("la pérdida en texto también", tradeLossesUsd(asText) === 150);
   check("el apalancamiento en texto llega como número",
     tradeIncomes([trade({ pnl_usd: "10", leverage: "5" })])[0].trade.leverage === 5);
+}
+
+section("hoy y la semana");
+{
+  const day = tradeStats(BOOK, { from: "2026-08-19", to: "2026-08-19" });
+  check("un día: solo sus operaciones", day.net === 420 && day.wins === 1 && day.losses === 0);
+  // The week of Wednesday 2026-08-19 runs Monday 17 to Sunday 23; to date is 17–19.
+  const week = tradeStats(BOOK, { from: weekStartKey("2026-08-19"), to: "2026-08-19" });
+  check("la semana a la fecha", week.net === 420 && week.wins + week.losses === 1);
+  const lastWeek = tradeStats(BOOK, { from: "2026-08-10", to: "2026-08-16" });
+  check("la semana anterior, completa", lastWeek.net === 265 - 150 && lastWeek.wins === 1 && lastWeek.losses === 1);
+  const none = tradeStats(BOOK, { from: "2026-08-20", to: "2026-08-20" });
+  check("un día sin operaciones da cero", none.net === 0 && none.wins === 0 && none.losses === 0 && none.winRate === null);
+  check("el mes sigue funcionando igual", tradeStats(BOOK, "2026-08").net === 1240);
+  check("el primer mes no depende del período", tradeStats(BOOK, { from: "2026-08-19", to: "2026-08-19" }).firstMonth === "2026-07");
+}
+
+section("lunes de la semana");
+{
+  check("miércoles → lunes", weekStartKey("2026-11-25") === "2026-11-23");
+  check("lunes → el mismo lunes", weekStartKey("2026-11-23") === "2026-11-23");
+  check("domingo → el lunes anterior", weekStartKey("2026-11-29") === "2026-11-23");
+  check("cruza el mes", weekStartKey("2026-12-02") === "2026-11-30");
+  check("cruza el año", weekStartKey("2027-01-01") === "2026-12-28");
 }
 
 section("la serie por mes");

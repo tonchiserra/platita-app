@@ -118,6 +118,16 @@ export function tradeProfitsUsd(trades: readonly TradeLike[], month?: string): n
   }, 0);
 }
 
+/**
+ * The operations a figure counts: a month (`YYYY-MM`) or an inclusive range of
+ * days (`YYYY-MM-DD`), such as this week or today.
+ */
+export type TradePeriod = string | { from: string; to: string };
+
+function inPeriod(date: string, period: TradePeriod): boolean {
+  return typeof period === "string" ? monthOf(date) === period : date >= period.from && date <= period.to;
+}
+
 export interface TradeStats {
   /** Profits minus losses, signed, in USD. */
   net: number;
@@ -129,7 +139,7 @@ export interface TradeStats {
   firstMonth: string | null;
 }
 
-export function tradeStats(trades: readonly TradeLike[], month?: string): TradeStats {
+export function tradeStats(trades: readonly TradeLike[], period?: TradePeriod): TradeStats {
   let net = 0;
   let wins = 0;
   let losses = 0;
@@ -138,7 +148,7 @@ export function tradeStats(trades: readonly TradeLike[], month?: string): TradeS
   for (const trade of trades) {
     const key = monthOf(trade.date);
     if (firstMonth === null || key < firstMonth) firstMonth = key;
-    if (month !== undefined && key !== month) continue;
+    if (period !== undefined && !inPeriod(trade.date, period)) continue;
     const amount = pnl(trade);
     net += amount;
     if (amount > 0) wins++;

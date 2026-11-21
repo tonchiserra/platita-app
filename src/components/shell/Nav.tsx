@@ -11,6 +11,7 @@ export const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/dashboard/income", label: "Ingresos", icon: "income" },
   { href: "/dashboard/patrimony", label: "Patrimonio", icon: "patrimony" },
   { href: "/dashboard/investments", label: "Inversiones", icon: "investments" },
+  { href: "/dashboard/trading", label: "Trading", icon: "trading" },
 ];
 
 function isActive(pathname: string, href: string) {

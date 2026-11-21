@@ -154,6 +154,17 @@ export function formatAgo(moment: string | Date, now = new Date()): string {
   return `el ${formatDayMonth(todayKey(date))}`;
 }
 
+/**
+ * The Monday of the week a day falls in, as `YYYY-MM-DD`. Weeks start on
+ * Monday, as they do in Argentina. Pure date arithmetic on the key, so no time
+ * zone can shift it.
+ */
+export function weekStartKey(dayKey: string): string {
+  const d = new Date(`${dayKey}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
 /** Current `YYYY-MM` in Buenos Aires. */
 export function currentMonthKey(now = new Date()): string {
   return todayKey(now).slice(0, 7);

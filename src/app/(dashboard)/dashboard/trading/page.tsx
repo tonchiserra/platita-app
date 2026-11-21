@@ -5,8 +5,8 @@ import { ChartCard, ChartTable, LineChart, chartVars } from "@/components/charts
 import { NewTradeButton, TradeList } from "@/components/investments/TradeClient";
 import { BingxSyncBar } from "@/components/investments/BingxSync";
 import { getBingxConnection, getPlatforms, getTrades } from "@/lib/data";
-import { tradeStats } from "@/lib/utils/trading";
-import { currentMonthKey, formatAgo, formatMonthName, formatPercent, monthRange } from "@/lib/utils/format";
+import { tradeStats, type TradeStats } from "@/lib/utils/trading";
+import { currentMonthKey, formatAgo, formatMonthName, formatPercent, monthRange, todayKey, weekStartKey } from "@/lib/utils/format";
 import s from "@/components/investments/investments.module.css";
 
 export const metadata = { title: "Trading · Platita" };
@@ -15,20 +15,66 @@ export const metadata = { title: "Trading · Platita" };
  * The trading book, in USD like the PnL it records. Its profits reach the
  * income figures and its losses the estimated patrimony through the pages that
  * own those numbers, not through anything here.
+ *
+ * A section of its own in the nav, not a tab of Inversiones: it is the page
+ * the user opens most.
  */
 export default function TradingPage() {
   return (
-    <Suspense fallback={<Skeleton height={480} />}>
-      <TradingContent />
-    </Suspense>
+    <>
+      <h1 className="h1">Trading</h1>
+      <Suspense fallback={<Skeleton height={480} />}>
+        <TradingContent />
+      </Suspense>
+    </>
+  );
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * Today, this week (Monday to today) and this month, all at once. Weeks and
+ * days are Buenos Aires calendar days, like the month.
+ */
+function PeriodResults({ periods }: { periods: { label: string; stats: TradeStats }[] }) {
+  return (
+    <Box tone="grey" className={s.periods}>
+      <span className={s.statLabel}>Resultado</span>
+      <dl className={s.periodList}>
+        {periods.map(({ label, stats }, i) => {
+          const count = stats.wins + stats.losses;
+          return (
+            <div key={label} className={s.periodRow} style={{ "--i": i } as React.CSSProperties}>
+              <dt className={s.periodName}>{label}</dt>
+              <dd className={s.periodValue}>
+                {count > 0 ? (
+                  <Money className={stats.net >= 0 ? s.in : s.out} value={stats.net} currency="USD" signed />
+                ) : (
+                  <span className={s.periodEmpty}>—</span>
+                )}
+              </dd>
+              <dd className={s.periodSub}>
+                {count > 0 ? `${plural(stats.wins, "ganada", "ganadas")} · ${plural(stats.losses, "perdida", "perdidas")}` : "Sin operaciones"}
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+    </Box>
   );
 }
 
 async function TradingContent() {
   const [trades, platforms, bingx] = await Promise.all([getTrades(), getPlatforms(), getBingxConnection()]);
   const current = currentMonthKey();
-  const month = tradeStats(trades, current);
+  const today = todayKey();
   const all = tradeStats(trades);
+  const monthName = formatMonthName(current);
+  const periods = [
+    { label: "Hoy", stats: tradeStats(trades, { from: today, to: today }) },
+    { label: "Esta semana", stats: tradeStats(trades, { from: weekStartKey(today), to: today }) },
+    { label: monthName.charAt(0).toUpperCase() + monthName.slice(1), stats: tradeStats(trades, current) },
+  ];
   const platformOptions = platforms.filter((p) => p.is_active).map((p) => ({ id: p.id, name: p.name }));
 
   // Running result, one point per calendar month since the first operation.
@@ -46,14 +92,8 @@ async function TradingContent() {
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {/* Trading is always in dollars, the unit its results are entered in — never pesos. */}
           <Hero label="Resultado acumulado" lead="USD" usd={all.net} ars={null} bySign />
-          <div className={s.summary}>
-            <Box tone={month.net >= 0 ? "up" : "down"} className={s.stat}>
-              <span className={s.statLabel}>Resultado de {formatMonthName(current)}</span>
-              <Money className={s.statValue} value={month.net} currency="USD" signed />
-              <span className={s.statSub}>
-                {month.wins} ganadas · {month.losses} perdidas
-              </span>
-            </Box>
+          <div className={s.tradeSummary}>
+            <PeriodResults periods={periods} />
             <Box tone="grey" className={s.stat}>
               <span className={s.statLabel}>Tasa de acierto</span>
               <span className={s.statValue}>{all.winRate !== null ? formatPercent(all.winRate, { signed: false, decimals: 0 }) : "—"}</span>

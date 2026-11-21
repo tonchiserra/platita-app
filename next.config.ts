@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
   images: {
     formats: ["image/avif", "image/webp"],
   },
+  // Trading used to be a tab inside Inversiones. Old bookmarks land on its own section.
+  async redirects() {
+    return [{ source: "/dashboard/investments/trading", destination: "/dashboard/trading", permanent: true }];
+  },
 };
 
 export default nextConfig;
