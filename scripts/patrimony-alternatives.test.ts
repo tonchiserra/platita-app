@@ -1,4 +1,4 @@
-import { buildAlternatives, type TimelinePoint } from "@/lib/utils/patrimony-alternatives";
+import { buildAlternatives, rebaseDollarized, type TimelinePoint } from "@/lib/utils/patrimony-alternatives";
 
 let pass = 0, fail = 0;
 const check = (n: string, c: boolean, x = "") => {
@@ -153,15 +153,43 @@ section("meses sin snapshot");
   check("the alternatives keep accumulating anyway", out[1].mattress === 5_100_000);
 }
 
-section("el rango no cambia el cálculo");
+section("el rango reinicia el dolarizado en su primer mes");
 {
-  // Cropping the output must equal computing on the whole history and slicing.
+  // The worked months as `buildGrowth` hands them to the chart.
   const full = buildAlternatives(worked);
-  const cropped = full.filter((p) => p.date >= "2026-02-01");
-  check("the last month is identical either way",
-    cropped[cropped.length - 1].mattress === full[2].mattress &&
-    near(cropped[cropped.length - 1].dollarized, full[2].dollarized ?? 0));
-  check("a cropped view does not restart at the anchor", cropped[0].mattress === 5_100_000);
+  const series = (patrimony: (number | null)[]) => ({
+    full: {
+      ars: full.map((p) => p.dollarized),
+      usd: full.map((p, i) => (p.dollarized === null ? null : p.dollarized / worked[i].blueRate!)),
+    },
+    patrimony,
+    blue: worked.map((p) => p.blueRate ?? null),
+    savingsUsd: worked.map((p) => p.netSavingsUsd),
+  });
+  const closes = series(worked.map((p) => p.patrimonyArs));
+
+  const all = rebaseDollarized(closes, 0);
+  check("from the first movement it is the whole-history line",
+    all.ars.length === 3 && all.ars.every((v, i) => v === full[i].dollarized));
+
+  // From February: 5.400.000 / 1250 = 4320 USD; March adds 50 -> 4370 x 2000.
+  const feb = rebaseDollarized(closes, 1);
+  check("it is cropped to the window", feb.ars.length === 2 && feb.usd.length === 2);
+  check("it starts at the net worth of the range's first month", near(feb.ars[0], 5_400_000), String(feb.ars[0]));
+  check("the anchor month adds no savings", near(feb.usd[0], 4_320), String(feb.usd[0]));
+  check("later months add their savings at their own blue", near(feb.ars[1], 8_740_000), String(feb.ars[1]));
+  check("it differs from cropping the whole-history line", !near(feb.ars[1], full[2].dollarized ?? 0));
+
+  // February has no close: the line waits for March and starts on its close.
+  const gap = rebaseDollarized(series([5_000_000, null, 6_100_000]), 1);
+  check("a month without a close does not anchor", gap.ars[0] === null && gap.usd[0] === null);
+  check("the line starts at the next close", near(gap.ars[1], 6_100_000), String(gap.ars[1]));
+
+  const none = rebaseDollarized(series([5_000_000, null, null]), 1);
+  check("with no close in the window there is no line", none.ars.every((v) => v === null));
+
+  const noRates = rebaseDollarized({ ...closes, full: { ars: [null, null, null], usd: [null, null, null] } }, 1);
+  check("without a dollarized line there is nothing to rebase", noRates.ars.every((v) => v === null));
 }
 
 section("valor real de los dólares (IPC de Estados Unidos)");

@@ -4,12 +4,13 @@ import { useState, type CSSProperties } from "react";
 import { ChartCard, ChartTable, Legend, LineChart, ToggleView, chartVars } from "./Charts";
 import { ui } from "@/components/ui";
 import type { GrowthSeries } from "@/lib/compute";
+import { rebaseDollarized } from "@/lib/utils/patrimony-alternatives";
 
 /**
- * The time range only crops the series — it never recomputes it. The
- * dollarized line is built once over the whole history, anchored at the first
- * movement; re-basing it per range would make 3M, 6M and 1A three different
- * charts instead of three windows onto one.
+ * The time range crops the patrimony line and restarts the dollarized one at
+ * the range's first month (`rebaseDollarized`): 6M answers "if I had gone to
+ * dollars six months ago", from the net worth I had then. A range that opens
+ * before the first movement keeps the whole-history line, anchored there.
  */
 const RANGES = [
   { label: "3M", months: 3 },
@@ -38,7 +39,10 @@ export function GrowthChart({ growth, current }: { growth: GrowthSeries; current
   const view = {
     months: crop(growth.months, start),
     patrimony: { ars: crop(growth.patrimony.ars, start), usd: crop(growth.patrimony.usd, start) },
-    dollarized: { ars: crop(growth.dollarized.ars, start), usd: crop(growth.dollarized.usd, start) },
+    dollarized: rebaseDollarized(
+      { full: growth.dollarized, patrimony: growth.patrimony.ars, blue: growth.blue, savingsUsd: growth.savingsUsd },
+      start
+    ),
     notes: crop(growth.notes, start),
     estimateFrom: growth.estimateFrom === undefined ? undefined : Math.max(0, growth.estimateFrom - start),
   };
@@ -114,7 +118,7 @@ export function GrowthChart({ growth, current }: { growth: GrowthSeries; current
           ]}
         />
       }
-      note={growth.hasDollarized ? "Dolarizado: el patrimonio inicial y el ahorro de cada mes pasados a dólares al blue de ese mes, sin rendimientos." : undefined}
+      note={growth.hasDollarized ? "Dolarizado: el patrimonio al inicio del período y el ahorro de cada mes pasados a dólares al blue de ese mes, sin rendimientos." : undefined}
     >
       {/* Keyed by range, so a new window redraws instead of jumping. */}
       <ToggleView when="off">

@@ -73,9 +73,8 @@ export interface AlternativesPoint {
  * The anchor month contributes no savings: its closing balance already
  * reflects that month's income and expenses, so adding them would count twice.
  *
- * The caller passes the whole history and slices the *result* for display.
- * Recomputing per visible range would make each range a different chart rather
- * than a window onto one.
+ * This is the whole-history line. A time range that opens later restarts the
+ * dollarized line at its own first month with `rebaseDollarized`.
  */
 export function buildAlternatives(points: TimelinePoint[]): AlternativesPoint[] {
   if (points.length === 0) return [];
@@ -133,4 +132,61 @@ export function buildAlternatives(points: TimelinePoint[]): AlternativesPoint[] 
   }
 
   return out;
+}
+
+export interface DollarizedSeries {
+  ars: (number | null)[];
+  usd: (number | null)[];
+}
+
+export interface RebaseInput {
+  /** The whole-history line, from `buildAlternatives`. */
+  full: DollarizedSeries;
+  /** Recorded net worth per month (closes and today's estimate), null where none. */
+  patrimony: (number | null)[];
+  /** Blue at each month end. */
+  blue: (number | null)[];
+  /** That month's savings, in dollars bought at that month's blue. */
+  savingsUsd: (number | null)[];
+}
+
+/**
+ * The dollarized line for a window that opens at month `from`, returned
+ * cropped to that window. It answers "if I had gone to dollars at the start of
+ * this range": the net worth recorded that month turned into dollars at its
+ * blue, plus each later month's savings in dollars of their own month, all
+ * valued at each month's blue. Both lines leave from the same point.
+ *
+ *   dollarized(i) = blue_i × ( P_from / blue_from + Σ savingsUsd after from )
+ *
+ * As in `buildAlternatives`, the anchor month adds no savings: its close
+ * already counts them.
+ *
+ * A window that opens at or before the first movement keeps the whole-history
+ * line, since there is nothing earlier to drop. A month with no recorded net
+ * worth can't anchor, so the line starts at the first one in the window that has it.
+ */
+export function rebaseDollarized(input: RebaseInput, from: number): DollarizedSeries {
+  const { full, patrimony, blue, savingsUsd } = input;
+  const first = full.ars.findIndex((v) => v !== null);
+  if (first === -1 || from <= first) return { ars: full.ars.slice(from), usd: full.usd.slice(from) };
+
+  let anchor = from;
+  while (anchor < patrimony.length && (patrimony[anchor] === null || !blue[anchor])) anchor++;
+
+  const ars: (number | null)[] = [];
+  const usd: (number | null)[] = [];
+  let dollars: number | null = null;
+  for (let i = from; i < patrimony.length; i++) {
+    if (i === anchor) dollars = patrimony[i]! / blue[i]!;
+    else if (i > anchor && dollars !== null) {
+      const saved = savingsUsd[i];
+      dollars = saved === null ? null : dollars + saved;
+    }
+    const rate = blue[i];
+    const value = i >= anchor && dollars !== null && rate ? dollars * rate : null;
+    ars.push(value);
+    usd.push(value === null ? null : dollars);
+  }
+  return { ars, usd };
 }

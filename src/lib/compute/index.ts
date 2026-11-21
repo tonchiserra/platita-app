@@ -152,6 +152,12 @@ export interface GrowthSeries {
   estimateFrom?: number;
   notes: (string | undefined)[];
   hasDollarized: boolean;
+  /**
+   * Blue at each month end and that month's savings in dollars of its own blue:
+   * what `rebaseDollarized` needs to restart the line at a range's first month.
+   */
+  blue: (number | null)[];
+  savingsUsd: (number | null)[];
 }
 
 /**
@@ -191,12 +197,15 @@ export function buildGrowth({
     currentMonth,
   });
   const alternatives = buildAlternatives(timeline);
-  const dollarByMonth = new Map(timeline.map((p, i) => [p.month, { ars: alternatives[i].dollarized, blue: p.blueRate }]));
+  const dollarByMonth = new Map(
+    timeline.map((p, i) => [p.month, { ars: alternatives[i].dollarized, blue: p.blueRate, savingsUsd: p.netSavingsUsd }])
+  );
 
   const firstClose = snapshots[0]?.date.slice(0, 7);
   const firstFlow = timeline[0]?.month;
   const start = [firstClose, firstFlow].filter(Boolean).sort()[0];
-  if (!start) return { months: [], patrimony: { ars: [], usd: [] }, dollarized: { ars: [], usd: [] }, notes: [], hasDollarized: false };
+  if (!start)
+    return { months: [], patrimony: { ars: [], usd: [] }, dollarized: { ars: [], usd: [] }, notes: [], hasDollarized: false, blue: [], savingsUsd: [] };
 
   const months = monthRange(start, currentMonth);
   const closeByMonth = new Map<string, Snapshot>();
@@ -233,10 +242,12 @@ export function buildGrowth({
     }
   });
 
+  const blue = months.map((m) => dollarByMonth.get(m)?.blue ?? blueAt(m));
+  const savingsUsd = months.map((m) => dollarByMonth.get(m)?.savingsUsd ?? null);
   const dolArs = months.map((m) => dollarByMonth.get(m)?.ars ?? null);
-  const dolUsd = months.map((m, i) => {
+  const dolUsd = months.map((_, i) => {
     const v = dolArs[i];
-    const rate = dollarByMonth.get(m)?.blue ?? blueAt(m);
+    const rate = blue[i];
     return v !== null && rate ? v / rate : null;
   });
 
@@ -247,5 +258,7 @@ export function buildGrowth({
     estimateFrom,
     notes,
     hasDollarized: dolArs.some((v) => v !== null),
+    blue,
+    savingsUsd,
   };
 }
