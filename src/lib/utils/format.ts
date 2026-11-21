@@ -165,6 +165,29 @@ export function weekStartKey(dayKey: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Every Monday from `from` to `to` (both Mondays, `YYYY-MM-DD`), inclusive. */
+export function weekRange(from: string, to: string): string[] {
+  const weeks: string[] = [];
+  const d = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`).getTime();
+  while (d.getTime() <= end) {
+    weeks.push(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() + 7);
+  }
+  return weeks;
+}
+
+/** A week by its Monday: `Semana del 17 nov`, with the year when it isn't this one. */
+export function formatWeekKey(monday: string, now = new Date()): string {
+  const year = monday.slice(0, 4);
+  return `Semana del ${formatDayMonth(monday)}${year === todayKey(now).slice(0, 4) ? "" : ` ${year}`}`;
+}
+
+/** Axis label for a week: `17 nov`, or `29 dic 25` where the year changes. */
+export function formatWeekTick(monday: string, withYear = false): string {
+  return `${formatDayMonth(monday)}${withYear ? ` ${monday.slice(2, 4)}` : ""}`;
+}
+
 /** Current `YYYY-MM` in Buenos Aires. */
 export function currentMonthKey(now = new Date()): string {
   return todayKey(now).slice(0, 7);

@@ -1,11 +1,23 @@
 import { useId, type CSSProperties, type ReactNode } from "react";
 import { Delta, LineLabel, Money } from "@/components/ui";
-import { formatMonthKey, formatMonthTick } from "@/lib/utils/format";
+import { formatMonthKey, formatMonthTick, formatWeekKey, formatWeekTick } from "@/lib/utils/format";
 import { labelStep, lineScale, zeroScale } from "./scale";
 import s from "./chart.module.css";
 
 export type Cur = "ARS" | "USD";
 type Views = { ars: (number | null)[]; usd: (number | null)[] };
+
+/**
+ * What one column stands for. Every chart is monthly (`YYYY-MM` keys) except
+ * the trading running result, which is weekly (keys are the Mondays,
+ * `YYYY-MM-DD`). Only the labels change.
+ */
+export type Period = "month" | "week";
+
+const periodTitle = (key: string, period: Period) => (period === "week" ? formatWeekKey(key) : formatMonthKey(key));
+
+/** Where an axis label should carry the year: the first column, and January's first. */
+const opensYear = (key: string, period: Period) => (period === "week" ? key.slice(5, 7) === "01" && Number(key.slice(8, 10)) <= 7 : key.endsWith("-01"));
 
 const cx = (...n: (string | false | undefined)[]) => n.filter(Boolean).join(" ");
 const PLOT_H = 184;
@@ -95,10 +107,12 @@ export function ChartTable({
   months,
   columns,
   currency = "ARS",
+  period = "month",
 }: {
   months: string[];
   columns: { label: string; values: Views }[];
   currency?: Cur;
+  period?: Period;
 }) {
   return (
     <details className={s.details}>
@@ -108,7 +122,7 @@ export function ChartTable({
           <table key={view} className={s.table}>
             <thead>
               <tr>
-                <th scope="col">Mes</th>
+                <th scope="col">{period === "week" ? "Semana" : "Mes"}</th>
                 {columns.map((c) => (
                   <th key={c.label} scope="col">
                     {c.label}
@@ -123,7 +137,7 @@ export function ChartTable({
                 .map(({ m, i }) => (
                   <tr key={m}>
                     <th scope="row" style={{ fontWeight: 400 }}>
-                      {formatMonthKey(m)}
+                      {periodTitle(m, period)}
                     </th>
                     {columns.map((c) => {
                       const v = c.values[view][i];
@@ -181,8 +195,9 @@ function Grid({ ticks, y, baseline }: { ticks: number[]; y: (v: number) => numbe
   );
 }
 
-function XAxis({ months, current }: { months: string[]; current?: string }) {
-  const step = labelStep(months.length);
+function XAxis({ months, current, period = "month" }: { months: string[]; current?: string; period?: Period }) {
+  // A week's label ("16 nov") is twice a month's ("nov"): fewer of them fit on a phone.
+  const step = labelStep(months.length, period === "week" ? 5 : 8);
   const spansYears = months.length > 0 && months[0].slice(0, 4) !== months[months.length - 1].slice(0, 4);
   // Count back from the newest month so the most recent one is always labelled.
   const last = months.length - 1;
@@ -192,10 +207,12 @@ function XAxis({ months, current }: { months: string[]; current?: string }) {
         (last - i) % step === 0 ? (
           <span
             key={m}
-            className={cx(s.xTick, m === current && s.xTickCurrent)}
+            className={cx(s.xTick, m === current && s.xTickCurrent, period === "week" && i === last && s.xTickEnd)}
             style={{ left: `${((i + 0.5) / months.length) * 100}%` }}
           >
-            {formatMonthTick(m, spansYears && (i === 0 || m.endsWith("-01")))}
+            {period === "week"
+              ? formatWeekTick(m, spansYears && (i === 0 || opensYear(m, period)))
+              : formatMonthTick(m, spansYears && (i === 0 || opensYear(m, period)))}
           </span>
         ) : null
       )}
@@ -271,9 +288,9 @@ function Tip({
   );
 }
 
-function srSummary(month: string, rows: TipRow[], cur: Cur) {
+function srSummary(month: string, rows: TipRow[], cur: Cur, period: Period = "month") {
   const fmt = (v: number | null) => (v === null ? "sin dato" : `${Math.round(v).toLocaleString("es-AR")} ${cur}`);
-  return `${formatMonthKey(month)}: ${rows.filter((r) => r.label !== "—").map((r) => `${r.label} ${fmt(r.value)}`).join(", ")}`;
+  return `${periodTitle(month, period)}: ${rows.filter((r) => r.label !== "—").map((r) => `${r.label} ${fmt(r.value)}`).join(", ")}`;
 }
 
 /* =====================================================================
@@ -446,7 +463,9 @@ export function LineChart({
   height = PLOT_H,
   notes,
   currency = "ARS",
+  period = "month",
 }: {
+  /** Column keys: months (`YYYY-MM`), or Mondays (`YYYY-MM-DD`) with `period="week"`. */
   months: string[];
   series: LineSeries[];
   current?: string;
@@ -455,6 +474,7 @@ export function LineChart({
   notes?: (string | undefined)[];
   /** The app charts in pesos; the trading book is the one place that stays in dollars. */
   currency?: Cur;
+  period?: Period;
 }) {
   const uid = useId().replace(/:/g, "");
   if (months.length === 0) return <div className={s.emptyPlot}>Cargá tu primer cierre de patrimonio para ver cómo crece.</div>;
@@ -556,14 +576,14 @@ export function LineChart({
                     rows.push({ label: "—", value: i }, { label: "Diferencia", value: rows[0].value - rows[1].value, strong: true });
                   }
                   return (
-                    <div key={m} className={cx(s.col, s.colLine)} tabIndex={0} aria-label={srSummary(m, rows, cur)}>
-                      <Tip title={formatMonthKey(m)} rows={rows} cur={cur} note={notes?.[i]} className={tipAlign(i, n)} />
+                    <div key={m} className={cx(s.col, s.colLine)} tabIndex={0} aria-label={srSummary(m, rows, cur, period)}>
+                      <Tip title={periodTitle(m, period)} rows={rows} cur={cur} note={notes?.[i]} className={tipAlign(i, n)} />
                     </div>
                   );
                 })}
               </div>
             </div>
-            <XAxis months={months} current={current} />
+            <XAxis months={months} current={current} period={period} />
           </div>
         );
       })}

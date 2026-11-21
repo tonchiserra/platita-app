@@ -101,7 +101,7 @@ An inline script in `src/app/layout.tsx` runs before first paint and sets the at
   - The patrimony and portfolio-value line is brand blue. The dollarized line is amber, and so is invested capital on the portfolio chart (both are the "second line").
   - The donut takes six categorical hues from the dataviz reference palette, with no green or red so they don't read as gain or loss, plus a neutral step for the rest.
 
-The six product charts and where they live: ingresos (Ingresos), gastos and the monthly donut (Gastos), ingresos vs. gastos (Inicio), capital growth with "vs. dolarizado" (Inicio, Patrimonio). Inversiones adds the portfolio performance chart; Trading has its running result.
+The six product charts and where they live: ingresos (Ingresos), gastos and the monthly donut (Gastos), ingresos vs. gastos (Inicio), capital growth with "vs. dolarizado" (Inicio, Patrimonio). Inversiones adds the portfolio performance chart; Trading has its running result, **weekly** (`runningResultByWeek`, keys are Mondays). `LineChart`/`ChartTable` take `period="week"` for that: only the labels change ("Semana del 17 nov", ticks "17 nov", at most 5 on the axis, with the last one right-aligned).
 
 ### Currency conversion
 

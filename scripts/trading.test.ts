@@ -4,12 +4,13 @@ import {
   tradeProfitsUsd,
   tradePnlByMonth,
   tradeStats,
+  runningResultByWeek,
   defaultLabel,
   type TradeLike,
 } from "@/lib/utils/trading";
 import { RETURN_SOURCES, TRADE_INCOME_SOURCE } from "@/lib/constants/sources";
 import { buildTimeline } from "@/lib/utils/patrimony-timeline";
-import { weekStartKey } from "@/lib/utils/format";
+import { formatWeekKey, formatWeekTick, weekRange, weekStartKey } from "@/lib/utils/format";
 
 let pass = 0, fail = 0;
 const check = (n: string, c: boolean, x = "") => {
@@ -123,6 +124,34 @@ section("lunes de la semana");
   check("domingo → el lunes anterior", weekStartKey("2026-11-29") === "2026-11-23");
   check("cruza el mes", weekStartKey("2026-12-02") === "2026-11-30");
   check("cruza el año", weekStartKey("2027-01-01") === "2026-12-28");
+}
+
+section("el acumulado semana a semana");
+{
+  // BOOK runs from Wednesday 2026-07-22 to Wednesday 2026-08-19.
+  const { weeks, usd } = runningResultByWeek(BOOK, "2026-08-26");
+  check("arranca el lunes de la primera operación", weeks[0] === "2026-07-20");
+  check("llega a la semana de hoy", weeks[weeks.length - 1] === "2026-08-24");
+  check("una semana por lunes, sin huecos", weeks.length === 6 && weeks.every((w, i) => i === 0 || Date.parse(w) - Date.parse(weeks[i - 1]) === 7 * 86_400_000));
+  check("la primera semana: la pérdida de julio", usd[0] === -310);
+  check("una semana sin operaciones repite el total", usd[1] === -310);
+  check("cierra en el total del libro", usd[usd.length - 1] === tradeStats(BOOK).net, String(usd[usd.length - 1]));
+  // Weeks: 20 Jul, 27 Jul, 3 Aug, 10 Aug, 17 Aug, 24 Aug.
+  check("3–9 ago: ETH +752, BTC −47", usd[2] - usd[1] === 705, String(usd[2] - usd[1]));
+  check("10–16 ago: SOL +265, ETH −150", usd[3] - usd[2] === 115, String(usd[3] - usd[2]));
+  check("17–23 ago: BTC +420", usd[4] - usd[3] === 420, String(usd[4] - usd[3]));
+  check("sin operaciones no hay serie", runningResultByWeek([], "2026-08-26").weeks.length === 0);
+}
+
+section("rango y rótulos de semanas");
+{
+  check("rango de lunes a lunes", weekRange("2026-11-02", "2026-11-23").join() === "2026-11-02,2026-11-09,2026-11-16,2026-11-23");
+  check("cruza el año", weekRange("2026-12-21", "2027-01-04").join() === "2026-12-21,2026-12-28,2027-01-04");
+  check("un solo lunes", weekRange("2026-11-23", "2026-11-23").length === 1);
+  const now = new Date("2026-11-21T15:00:00Z");
+  check("título de la semana", formatWeekKey("2026-11-16", now) === "Semana del 16 nov", formatWeekKey("2026-11-16", now));
+  check("con el año si no es este", formatWeekKey("2025-12-29", now) === "Semana del 29 dic 2025", formatWeekKey("2025-12-29", now));
+  check("marca del eje", formatWeekTick("2026-11-16") === "16 nov" && formatWeekTick("2025-12-29", true) === "29 dic 25", formatWeekTick("2025-12-29", true));
 }
 
 section("la serie por mes");

@@ -1,4 +1,5 @@
 import { TRADE_INCOME_SOURCE } from "@/lib/constants/sources";
+import { weekRange, weekStartKey } from "@/lib/utils/format";
 
 /**
  * The trading book's arithmetic.
@@ -193,4 +194,24 @@ export function tradePnlByMonth(trades: readonly TradeLike[]): TradeMonth[] {
     byMonth.set(month, row);
   }
   return [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
+}
+
+/**
+ * The running result week by week, for the Trading chart: one point per week
+ * (by its Monday) from the first operation's week through `today`'s, each the
+ * sum of everything up to the end of that week. Weeks with no operation repeat
+ * the previous total, so the line stays continuous.
+ */
+export function runningResultByWeek(trades: readonly TradeLike[], today: string): { weeks: string[]; usd: number[] } {
+  if (trades.length === 0) return { weeks: [], usd: [] };
+  const first = trades.reduce((min, t) => (t.date < min ? t.date : min), trades[0].date);
+  const weeks = weekRange(weekStartKey(first), weekStartKey(today));
+  const byWeek = new Map<string, number>();
+  for (const trade of trades) {
+    const week = weekStartKey(trade.date);
+    byWeek.set(week, (byWeek.get(week) ?? 0) + pnl(trade));
+  }
+  const usd: number[] = [];
+  for (const week of weeks) usd.push((usd[usd.length - 1] ?? 0) + (byWeek.get(week) ?? 0));
+  return { weeks, usd };
 }

@@ -5,8 +5,8 @@ import { ChartCard, ChartTable, LineChart, chartVars } from "@/components/charts
 import { NewTradeButton, TradeList } from "@/components/investments/TradeClient";
 import { BingxSyncBar } from "@/components/investments/BingxSync";
 import { getBingxConnection, getPlatforms, getTrades } from "@/lib/data";
-import { tradeStats, type TradeStats } from "@/lib/utils/trading";
-import { currentMonthKey, formatAgo, formatMonthName, formatPercent, monthRange, todayKey, weekStartKey } from "@/lib/utils/format";
+import { runningResultByWeek, tradeStats, type TradeStats } from "@/lib/utils/trading";
+import { currentMonthKey, formatAgo, formatMonthName, formatPercent, todayKey, weekStartKey } from "@/lib/utils/format";
 import s from "@/components/investments/investments.module.css";
 
 export const metadata = { title: "Trading · Platita" };
@@ -77,12 +77,8 @@ async function TradingContent() {
   ];
   const platformOptions = platforms.filter((p) => p.is_active).map((p) => ({ id: p.id, name: p.name }));
 
-  // Running result, one point per calendar month since the first operation.
-  const months = all.firstMonth ? monthRange(all.firstMonth, current) : [];
-  const netByMonth = new Map<string, number>();
-  for (const t of trades) netByMonth.set(t.date.slice(0, 7), (netByMonth.get(t.date.slice(0, 7)) ?? 0) + t.pnl_usd);
-  const usd: number[] = [];
-  for (const m of months) usd.push((usd[usd.length - 1] ?? 0) + (netByMonth.get(m) ?? 0));
+  // Running result, one point per week (by its Monday) since the first operation.
+  const { weeks, usd } = runningResultByWeek(trades, today);
   // Dollars only: the peso side of the series is deliberately empty.
   const series = { usd, ars: usd.map(() => null) };
 
@@ -95,17 +91,18 @@ async function TradingContent() {
           {/* Trading is always in dollars, the unit its results are entered in — never pesos. */}
           <Hero label="Resultado acumulado" lead="USD" usd={all.net} ars={null} bySign />
           <PeriodResults periods={periods} />
-          {months.length > 0 && (
+          {weeks.length > 0 && (
             <ChartCard
               title="Resultado acumulado"
-              subtitle="Ganancias menos pérdidas, sumadas mes a mes."
-              table={<ChartTable currency="USD" months={months} columns={[{ label: "Acumulado", values: series }]} />}
+              subtitle="Ganancias menos pérdidas, sumadas semana a semana."
+              table={<ChartTable currency="USD" period="week" months={weeks} columns={[{ label: "Acumulado", values: series }]} />}
               note="En dólares, como se cargan los resultados."
             >
               <LineChart
                 currency="USD"
-                months={months}
-                current={current}
+                period="week"
+                months={weeks}
+                current={weekStartKey(today)}
                 series={[{ key: "net", label: "Acumulado", color: chartVars.line, values: series, area: true, bySign: true }]}
               />
             </ChartCard>

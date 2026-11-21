@@ -184,6 +184,10 @@
   color: var(--text);
   font-weight: 500;
 }
+/* The newest week's label ends under its point instead of spilling past the plot. */
+.xTickEnd {
+  transform: translateX(-100%);
+}
 
 /* ---------- Hover columns & readout ---------- */
 
