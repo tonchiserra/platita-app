@@ -89,11 +89,28 @@ async function TradingContent() {
   return (
     <>
       {trades.length > 0 && (
+        // One block, read top to bottom: the total, the recent periods, how it
+        // got there, and the record. The book stays apart below.
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {/* Trading is always in dollars, the unit its results are entered in — never pesos. */}
           <Hero label="Resultado acumulado" lead="USD" usd={all.net} ars={null} bySign />
-          <div className={s.tradeSummary}>
-            <PeriodResults periods={periods} />
+          <PeriodResults periods={periods} />
+          {months.length > 0 && (
+            <ChartCard
+              title="Resultado acumulado"
+              subtitle="Ganancias menos pérdidas, sumadas mes a mes."
+              table={<ChartTable currency="USD" months={months} columns={[{ label: "Acumulado", values: series }]} />}
+              note="En dólares, como se cargan los resultados."
+            >
+              <LineChart
+                currency="USD"
+                months={months}
+                current={current}
+                series={[{ key: "net", label: "Acumulado", color: chartVars.line, values: series, area: true, bySign: true }]}
+              />
+            </ChartCard>
+          )}
+          <div className={s.tradeStats}>
             <Box tone="grey" className={s.stat}>
               <span className={s.statLabel}>Tasa de acierto</span>
               <span className={s.statValue}>{all.winRate !== null ? formatPercent(all.winRate, { signed: false, decimals: 0 }) : "—"}</span>
@@ -108,22 +125,6 @@ async function TradingContent() {
             </Box>
           </div>
         </div>
-      )}
-
-      {months.length > 0 && (
-        <ChartCard
-          title="Resultado acumulado"
-          subtitle="Ganancias menos pérdidas, sumadas mes a mes."
-          table={<ChartTable currency="USD" months={months} columns={[{ label: "Acumulado", values: series }]} />}
-          note="En dólares, como se cargan los resultados."
-        >
-          <LineChart
-            currency="USD"
-            months={months}
-            current={current}
-            series={[{ key: "net", label: "Acumulado", color: chartVars.line, values: series, area: true, bySign: true }]}
-          />
-        </ChartCard>
       )}
 
       <Section label="Libro" title="Operaciones cerradas" aside={<NewTradeButton platforms={platformOptions} />}>

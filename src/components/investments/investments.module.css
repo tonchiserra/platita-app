@@ -271,13 +271,11 @@
 
 /* ---------- Trading: today, this week, this month ---------- */
 
-.tradeSummary {
+/* Win rate and count, side by side under the chart. */
+.tradeStats {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-12);
-}
-.tradeSummary > :first-child {
-  grid-column: 1 / -1;
 }
 .periods {
   display: flex;
