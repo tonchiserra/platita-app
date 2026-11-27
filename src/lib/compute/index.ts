@@ -6,6 +6,7 @@ import { addMonths, endOfMonth, monthRange } from "@/lib/utils/format";
 import { buildAlternatives } from "@/lib/utils/patrimony-alternatives";
 import { buildTimeline, type TimelineFlow } from "@/lib/utils/patrimony-timeline";
 import { flowsSinceClose } from "@/lib/utils/patrimony-estimate";
+import { buildReturns, type ReturnClose, type ReturnSummary } from "@/lib/utils/returns";
 import { tradeIncomes, tradeLossesUsd } from "@/lib/utils/trading";
 import type { IncomeRow, Snapshot, TradeRow } from "@/lib/data";
 import type { ExchangeRates } from "@/types/database";
@@ -261,4 +262,60 @@ export function buildGrowth({
     blue,
     savingsUsd,
   };
+}
+
+/* =====================================================================
+ * Rendimiento: what the money earned beyond what was saved into it
+ * ===================================================================== */
+
+export interface ReturnsView extends ReturnSummary {
+  /** Trading result inside the measured window, in dollars. */
+  tradingUsd: number;
+}
+
+/**
+ * The return of the net worth in dollars, from the first close the recorded
+ * movements can explain to today's estimate (or the last close). Savings are
+ * the income that came from outside (`RETURN_SOURCES` and trading profits are
+ * gains, not savings) minus every expense, each at the blue of its date.
+ */
+export function buildReturnsView({
+  snapshots,
+  incomes,
+  expenses,
+  trades,
+  estimatedArs,
+  fx,
+  conv,
+  today,
+}: {
+  snapshots: readonly Snapshot[];
+  incomes: readonly (Flow & { source: string })[];
+  expenses: readonly Flow[];
+  trades: readonly TradeRow[];
+  estimatedArs: number | null;
+  fx: ExchangeRates;
+  conv: Conv;
+  today: string;
+}): ReturnsView | null {
+  const closes: ReturnClose[] = [];
+  for (const sn of snapshots) {
+    const rate = conv.blue(sn.date);
+    if (rate > 0) closes.push({ date: sn.date, valueUsd: sn.total_ars / rate });
+  }
+  const last = closes[closes.length - 1];
+  if (estimatedArs !== null && fx.usdRate > 0 && last && today > last.date)
+    closes.push({ date: today, valueUsd: estimatedArs / fx.usdRate, estimate: true });
+
+  const flows = [
+    ...incomes.filter((r) => !RETURN_SOURCES.has(r.source)).map((r) => ({ date: r.date, amountUsd: conv.toUsd(r) })),
+    ...expenses.map((r) => ({ date: r.date, amountUsd: -conv.toUsd(r) })),
+  ].filter((f) => f.date <= today);
+
+  const summary = buildReturns(closes, flows);
+  if (!summary) return null;
+  const tradingUsd = trades
+    .filter((t) => t.date > summary.startDate && t.date <= summary.endDate)
+    .reduce((s, t) => s + t.pnl_usd, 0);
+  return { ...summary, tradingUsd };
 }

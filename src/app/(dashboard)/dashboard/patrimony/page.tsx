@@ -2,10 +2,11 @@ import { Suspense } from "react";
 import { Section, Skeleton } from "@/components/ui";
 import { Hero, Equation, closeMeta } from "@/components/dashboard/Hero";
 import { GrowthChart } from "@/components/dashboard/Blocks";
+import { ReturnsSection } from "@/components/dashboard/Returns";
 import { CloseList, NewCloseButton, type CloseRow } from "@/components/patrimony/Closes";
 import { getConverter, getExpenses, getIncomes, getPlatforms, getRates, getSnapshots, getTrades } from "@/lib/data";
-import { allIncomes, buildGrowth, estimatePatrimony } from "@/lib/compute";
-import { currentMonthKey, formatDayMonth, formatMonthName } from "@/lib/utils/format";
+import { allIncomes, buildGrowth, buildReturnsView, estimatePatrimony } from "@/lib/compute";
+import { currentMonthKey, formatDayMonth, formatMonthName, todayKey } from "@/lib/utils/format";
 import { closeEndsPreviousMonth } from "@/lib/utils/patrimony-estimate";
 
 export const metadata = { title: "Patrimonio · Platita" };
@@ -32,6 +33,7 @@ async function PatrimonyContent() {
   const incomeRows = allIncomes(incomes, trades);
   const est = estimatePatrimony({ snapshots, incomes: incomeRows, expenses, trades, fx, currentMonth: current });
   const growth = buildGrowth({ snapshots, incomes: incomeRows, expenses, estimatedArs: est.estimatedArs, conv, history: conv.history, currentMonth: current });
+  const returns = buildReturnsView({ snapshots, incomes: incomeRows, expenses, trades, estimatedArs: est.estimatedArs, fx, conv, today: todayKey() });
 
   const last = est.lastClose;
   const heroArs = est.estimatedArs ?? last?.total_ars ?? 0;
@@ -78,6 +80,8 @@ async function PatrimonyContent() {
       </div>
 
       <GrowthChart growth={growth} current={current} />
+
+      <ReturnsSection view={returns} />
 
       <Section
         label="Cierres"

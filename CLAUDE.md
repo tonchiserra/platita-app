@@ -116,6 +116,15 @@ It is the last close revalued at today's rates, plus every movement since that c
 
 The dollarized counterfactual is `buildAlternatives` (`patrimony-alternatives.ts`), fed by `buildTimeline` (`patrimony-timeline.ts`). Both are pure and tested, and they still compute the mattress and real-value lines. Only `dollarized` is drawn. Returns on money already held (`RETURN_SOURCES`, trading profits included) stay out of it.
 
+### Rendimiento (Patrimonio)
+
+What the money earned beyond what was saved into it, in **dollars** (each close and each movement at the blue of its date; in pesos inflation would read as gain). `src/lib/utils/returns.ts` (pure, tested) + `buildReturnsView` in `src/lib/compute`, shown by `ReturnsSection` (`src/components/dashboard/Returns.tsx`) on Patrimonio, below capital growth.
+
+- Between two closes: `gain = end − start − savings`. Savings are incomes outside `RETURN_SOURCES` minus every expense; trading profits, investment returns, FX and trading losses all land in the gain.
+- Each period's rate is Modified Dietz (gain over the opening balance plus each flow weighted by the days it was held), and periods chain into a time-weighted return, so a salary neither inflates nor dilutes the %.
+- The measure opens at the first close no earlier than the day before the month of the first recorded movement (before that, savings and gain can't be told apart). The last point is today's `estimatePatrimony`, drawn dashed.
+- The breakdown splits the gain into trading (`pnl_usd` in the window) and the rest (dollar, investments, interest).
+
 ### Investments
 
 - `investments.side` is `buy` | `sell` (migration 004). Rows without it are purchases. `getInvestments` selects `*` so the page still works before the migration, and `hasSidesColumn()` hides sales until it is applied.
